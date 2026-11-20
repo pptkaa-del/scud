@@ -1,0 +1,155 @@
+contractors:
+  get:
+    summary: Получить список подрядчиков
+    description: |
+      Возвращает список подрядчиков с пагинацией.
+      Ответ имеет стандартный формат `{items, total, limit, offset}`.
+    operationId: getContractors
+    tags:
+      - Contractors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/ContractorNameSearchQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список подрядчиков
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/response_wrappers.yaml#/ContractorListResponse'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/ContractorListExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать нового подрядчика
+    description: |
+      Создает нового подрядчика в системе.
+      created_by устанавливается автоматически из X-Remote-User header.
+    operationId: createContractor
+    tags:
+      - Contractors
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/CreateContractorRequest'
+          example:
+            name: "ООО Строй-Сервис"
+    responses:
+      '201':
+        description: Подрядчик успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/contractor.yaml#/Contractor'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/ContractorExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+contractors_by_id:
+  get:
+    summary: Получить подрядчика по ID
+    description: |
+      Возвращает информацию о подрядчике по его ID.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: getContractorById
+    tags:
+      - Contractors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/ContractorIdPath'
+    responses:
+      '200':
+        description: Информация о подрядчике
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/contractor.yaml#/Contractor'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/ContractorExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  put:
+    summary: Обновить данные подрядчика
+    description: |
+      Обновляет данные подрядчика (название).
+      Требуется аутентификация через X-Remote-User header.
+    operationId: updateContractor
+    tags:
+      - Contractors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/ContractorIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/UpdateContractorRequest'
+          example:
+            name: "ООО Строй-Сервис Плюс"
+    responses:
+      '200':
+        description: Подрядчик успешно обновлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/contractor.yaml#/Contractor'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/ContractorExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  delete:
+    summary: Удалить подрядчика
+    description: |
+      Удаляет подрядчика из системы.
+      Возвращает статус 204 No Content при успешном удалении.
+    operationId: deleteContractor
+    tags:
+      - Contractors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/ContractorIdPath'
+    responses:
+      '204':
+        description: Подрядчик успешно удален
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

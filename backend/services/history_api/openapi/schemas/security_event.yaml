@@ -1,0 +1,116 @@
+EventSeverity:
+  type: string
+  description: Уровень критичности события безопасности
+  enum:
+    - low
+    - medium
+    - high
+    - critical
+    - info
+    - warning
+    - alert
+  example: high
+
+SecurityEvent:
+  type: object
+  description: Событие безопасности (нарушение порогов, взлом, отключение и т.д.)
+  required:
+    - id
+    - event_type
+    - severity
+    - occurred_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/EventId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    sensor_id:
+      $ref: './common_fields.yaml#/NullableSensorId'
+    event_type:
+      type: string
+      description: Тип события безопасности
+      enum:
+        - command_2fa_failed
+        - command_2fa_issued
+        - command_2fa_mismatch
+        - command_2fa_verified
+        - command_late_execution
+        - door_tamper
+        - intrusion
+        - offline
+        - threshold_violation
+      example: threshold_violation
+    severity:
+      $ref: '#/EventSeverity'
+    violated_thresholds:
+      type: array
+      description: Массив нарушенных пороговых значений (JSON)
+      items:
+        type: object
+      example:
+        - threshold_id: 123
+          sensor_type: "temperature"
+          value: 45.0
+          max_allowed: 35.0
+    occurred_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Время возникновения события
+    resolved_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    resolved_by:
+      $ref: './common_fields.yaml#/UserId'
+    metadata:
+      $ref: './common_fields.yaml#/Metadata'
+
+SecurityEventCreate:
+  type: object
+  description: Данные для создания события безопасности
+  required:
+    - event_type
+    - severity
+  properties:
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    sensor_id:
+      $ref: './common_fields.yaml#/NullableSensorId'
+    event_type:
+      type: string
+      enum: [command_2fa_failed, command_2fa_issued, command_2fa_mismatch, command_2fa_verified, command_late_execution, door_tamper, intrusion, offline, threshold_violation]
+    severity:
+      $ref: '#/EventSeverity'
+    violated_thresholds:
+      type: array
+      items:
+        type: object
+    metadata:
+      $ref: './common_fields.yaml#/Metadata'
+    event_uid:
+      type: string
+      format: uuid
+      nullable: true
+      description: |
+        ARC-02: продьюсер-генерируемый UUID для идемпотентности повторной
+        доставки (at-least-once). NULL → дедупликация не применяется.
+        Дубликат по event_uid → 200 {"status":"duplicate"} вместо 201.
+
+SecurityEventListResponse:
+  type: object
+  required:
+    - items
+    - total
+    - limit
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/SecurityEvent'
+    total:
+      type: integer
+      example: 456
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0

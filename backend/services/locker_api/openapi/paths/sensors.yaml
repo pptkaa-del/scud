@@ -1,0 +1,140 @@
+sensors:
+  get:
+    summary: Получить список датчиков шкафа
+    description: |
+      Возвращает список датчиков указанного шкафа с пагинацией.
+      Ответ имеет стандартный формат `{items, total, limit, offset}`.
+    operationId: getSensors
+    tags:
+      - Sensors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список датчиков с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor.yaml#/SensorListResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать новый датчик
+    description: |
+      Создает новый датчик для указанного шкафа.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: createSensor
+    tags:
+      - Sensors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/sensor.yaml#/SensorCreate'
+          example:
+            serial_number: "TEMP-12345"
+            sensor_type_id: 1
+            current_value: 23.5
+    responses:
+      '201':
+        description: Датчик успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor.yaml#/Sensor'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+sensors_by_id:
+  get:
+    summary: Получить датчик по ID
+    description: Возвращает информацию о конкретном датчике
+    operationId: getSensorById
+    tags:
+      - Sensors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+    responses:
+      '200':
+        description: Данные датчика
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor.yaml#/Sensor'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  patch:
+    summary: Обновить статус активности датчика
+    description: |
+      Обновляет статус активности датчика (включен/выключен).
+      Используется для временного отключения неисправных датчиков.
+    operationId: updateSensorActiveStatus
+    tags:
+      - Sensors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/sensor.yaml#/SensorActiveStatusUpdate'
+    responses:
+      '200':
+        description: Статус активности обновлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor.yaml#/Sensor'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  delete:
+    summary: Удалить датчик
+    description: Удаляет датчик из системы
+    operationId: deleteSensor
+    tags:
+      - Sensors
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+    responses:
+      '204':
+        $ref: '../components/responses.yaml#/NoContent'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'

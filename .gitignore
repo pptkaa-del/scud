@@ -1,0 +1,55 @@
+.idea
+.venv*
+
+# Environment files (secrets)
+.env
+.env.local
+.env.dev
+backend/.env
+backend/.env.local
+docker-compose.override.yaml
+
+# Docker secrets file-mounts. Реальные секретные файлы не должны
+# попадать в репозиторий; .gitkeep удерживает пустую директорию.
+backend/secrets/*
+!backend/secrets/.gitkeep
+
+# Coverage runtime data (bind-mount из *_tests контейнеров).
+# Объединяется в CI на runner; для локальной разработки хранится здесь.
+backend/.coverage-data/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Lint scratch: сырые логи локальных прогонов ruff/mypy/sqlfluff/etc.
+# Не путать с CI artifacts — те живут в job summary.
+lint-out/
+
+# mypy кэш отключён в CI (pyproject [tool.mypy] cache_dir=/dev/null), но IDE/хост
+# может создать его при локальном прогоне — игнорируем, чтобы не попал в репозиторий.
+.mypy_cache/
+
+# System E2E test artifacts (generated reports, etc.) — local only
+tests/system/artifacts/*
+!tests/system/artifacts/.gitkeep
+
+# WireGuard-конфиг SMS-шлюза с приватным ключом и PSK
+SKYD_init.conf
+
+# TLS-материал MQTT-листенера: ключи и CA генерируются локально
+# (backend/scripts/gen-mqtt-tls-certs.sh) и не коммитятся. Форма `dir/*` +
+# негация обязательна: при игноре самого каталога git не смотрит негации внутри.
+backend/mqtt-tls/ca/*
+!backend/mqtt-tls/ca/.gitkeep
+backend/mqtt-tls/server/*
+!backend/mqtt-tls/server/.gitkeep
+backend/mqtt-tls/certs/*
+!backend/mqtt-tls/certs/.gitkeep
+
+# Конфиг и рабочий каталог скрипта развёртывания
+backend/deploy.conf
+backend/deploy.conf.tmp.*
+backend/.env.tmp.*
+backend/secrets.old-*/
+/.deploy/

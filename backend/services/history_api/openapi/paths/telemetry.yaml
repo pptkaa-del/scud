@@ -1,0 +1,71 @@
+telemetry_batch:
+  post:
+    summary: Batch-запись телеметрии датчиков
+    description: |
+      Создает batch записей телеметрии (до 1000 за раз).
+      Оптимизирован для приема данных от locker_api.
+
+      Использует партиционированную таблицу с партиционированием по месяцам.
+    operationId: createTelemetryBatch
+    tags:
+      - Telemetry
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/telemetry.yaml#/TelemetryBatchRequest'
+          example:
+            locker_id: "550e8400-e29b-41d4-a716-446655440000"
+            readings:
+              - sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+                sensor_type_code: "temperature"
+                value: 23.7
+                recorded_at: "2024-03-18T10:25:00Z"
+              - sensor_id: "660e8400-e29b-41d4-a716-446655440222"
+                sensor_type_code: "humidity"
+                value: 65.0
+    responses:
+      '201':
+        $ref: '../components/responses.yaml#/TelemetryBatchCreated'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+telemetry_list:
+  get:
+    summary: Получить телеметрию с фильтрацией
+    description: |
+      Возвращает список записей телеметрии с фильтрацией по различным параметрам.
+      Поддерживает пагинацию.
+    operationId: getTelemetryList
+    tags:
+      - Telemetry
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdQuery'
+      - $ref: '../components/parameters.yaml#/SensorIdQuery'
+      - $ref: '../components/parameters.yaml#/SensorTypeCodeQuery'
+      - $ref: '../components/parameters.yaml#/FromDateQuery'
+      - $ref: '../components/parameters.yaml#/ToDateQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список записей телеметрии
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/telemetry.yaml#/TelemetryListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'

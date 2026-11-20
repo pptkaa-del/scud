@@ -1,0 +1,299 @@
+users:
+  get:
+    summary: Получить список пользователей
+    description: |
+      Возвращает список пользователей с возможностью фильтрации по статусу и подрядчику.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: getUsers
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserStateQuery'
+      - $ref: '../components/parameters.yaml#/ContractorIdQuery'
+      - $ref: '../components/parameters.yaml#/UserRoleQuery'
+      - $ref: '../components/parameters.yaml#/UserNameSearchQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список пользователей
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/response_wrappers.yaml#/UserListResponse'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserListExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать нового пользователя
+    description: |
+      Создает нового пользователя в системе.
+      Номер телефона должен быть уникальным и в формате +79999999999.
+      created_by устанавливается автоматически из X-Remote-User header.
+    operationId: createUser
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/CreateUserRequest'
+          examples:
+            withPassword:
+              summary: Пользователь с паролем
+              value:
+                phone: "+79991234567"
+                full_name: "Иванов Иван Иванович"
+                password: "secret123"
+            withContractor:
+              summary: Пользователь с подрядчиком
+              value:
+                phone: "+79991234567"
+                full_name: "Иванов Иван Иванович"
+                contractor_id: 456
+                password: "secret123"
+            withoutContractor:
+              summary: Пользователь без подрядчика (без пароля — не сможет войти)
+              value:
+                phone: "+79995556677"
+                full_name: "Петров Петр Петрович"
+    responses:
+      '201':
+        description: Пользователь успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/user.yaml#/User'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../components/responses.yaml#/Forbidden'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+users_by_id:
+  get:
+    summary: Получить пользователя по ID
+    description: |
+      Возвращает информацию о пользователе по его ID.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: getUserById
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    responses:
+      '200':
+        description: Информация о пользователе
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/user.yaml#/User'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  patch:
+    summary: Обновить данные пользователя
+    description: |
+      Частичное обновление пользователя (PATCH).
+      Передаются только изменяемые поля.
+      updated_by устанавливается автоматически из X-Remote-User header.
+      При изменении телефона проверяется уникальность.
+    operationId: updateUser
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/UpdateUserRequest'
+          examples:
+            updateName:
+              summary: Изменить имя
+              value:
+                full_name: "Иванов Иван Петрович"
+            updatePhone:
+              summary: Изменить телефон
+              value:
+                phone: "+79997654321"
+            updateRole:
+              summary: Изменить роль
+              value:
+                role: operator
+            updatePassword:
+              summary: Изменить пароль
+              value:
+                password: "newsecret123"
+            updateMultiple:
+              summary: Изменить несколько полей
+              value:
+                full_name: "Иванов Иван Петрович"
+                phone: "+79997654321"
+                role: operator
+    responses:
+      '200':
+        description: Пользователь успешно обновлён
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/user.yaml#/User'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  delete:
+    summary: Деактивировать пользователя
+    description: |
+      Деактивирует пользователя (устанавливает state = 'deactivated').
+      updated_by устанавливается автоматически из X-Remote-User header.
+      Возвращает статус 204 No Content при успешной деактивации.
+    operationId: deactivateUser
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    responses:
+      '204':
+        description: Пользователь успешно деактивирован
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+user_reactivate:
+  post:
+    summary: Реактивировать пользователя
+    description: |
+      Реактивирует ранее деактивированного пользователя (устанавливает state='active').
+      updated_by устанавливается автоматически из X-Remote-User header.
+      Операция идемпотентна: если пользователь уже активен, возвращает его без изменений.
+    operationId: reactivateUser
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    responses:
+      '200':
+        description: Пользователь успешно реактивирован
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/user.yaml#/User'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+user_enable_2fa:
+  post:
+    summary: Включить 2FA пользователю
+    description: |
+      Включает второй фактор (OTP в Max). Требуется заданный пароль.
+      Если Max-аккаунт ещё не привязан — возвращает свежую invite-ссылку
+      (статус 200). Если пользователь уже привязан к Max — статус 204.
+      Требуется роль operator или выше (проверяется правилом ACM).
+    operationId: enableUser2fa
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    responses:
+      '204':
+        description: 2FA включена; пользователь уже привязан к Max.
+      '200':
+        description: 2FA включена; пользователь не привязан — выдана invite-ссылка.
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/response_wrappers.yaml#/Enable2FAInviteResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+user_disable_2fa:
+  post:
+    summary: Выключить 2FA пользователю
+    description: |
+      Выключает второй фактор. Операция идемпотентна: если 2FA уже была
+      выключена (или у пользователя нет записи аутентификации) — также 204.
+      Требуется роль operator или выше (проверяется правилом ACM).
+    operationId: disableUser2fa
+    tags:
+      - Users
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    responses:
+      '204':
+        description: 2FA выключена (или уже была выключена).
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

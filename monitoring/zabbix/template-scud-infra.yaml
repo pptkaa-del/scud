@@ -1,0 +1,1209 @@
+---
+zabbix_export:
+  version: "7.0"
+  template_groups:
+    - uuid: 02cbee81499c40b39e2bcb6b91427aca
+      name: "Templates/SCUD"
+    - uuid: 645d206fc63a4ee89cff059ac31bca3e
+      name: "Templates/SCUD/Infra"
+
+  templates:
+
+    # =========================================================================
+    # Redis — FALLBACK (REDIS_PLUGIN_ABSENT in Astra 7.0.10 build).
+    # The agent2 redis plugin is absent in this certified build; native
+    # redis.info[...] items are unavailable. Redis is monitored via a single
+    # reachability gauge scud_redis_up (0=down/1=up) emitted by shared.metrics
+    # on each service's /metrics endpoint. We scrape acm:8004/metrics (HTTP_AGENT
+    # master) and derive scud.infra.redis.up via PROMETHEUS_PATTERN preprocessing.
+    # Detailed redis internals (memory, clients, ops) are unavailable under this
+    # fallback — the honest consequence of the absent plugin.
+    # =========================================================================
+    - uuid: d1fec7b2ea9a4d83a04b19c26a9f78ae
+      template: "scud-infra-redis"
+      name: "SCUD Infra Redis"
+      description: "Redis reachability via scud_redis_up gauge on acm /metrics (REDIS_PLUGIN_ABSENT fallback — no redis.info items)."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      items:
+        - uuid: 5b56ef3e297c4162bcf2ece011f013d6
+          name: "Redis: acm /metrics (master)"
+          type: HTTP_AGENT
+          key: "scud.infra.redis.metrics"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://acm:8004/metrics"
+          status_codes: "200"
+          timeout: 10s
+          description: "Raw Prometheus text from acm /metrics; master for the redis reachability dependent."
+        - uuid: 1da7dde391f0455f829b046ff1f0463a
+          name: "Redis: reachability (scud_redis_up)"
+          type: DEPENDENT
+          key: "scud.infra.redis.up"
+          value_type: FLOAT
+          master_item:
+            key: "scud.infra.redis.metrics"
+          description: "1 if Redis is reachable as seen by acm, 0 if down. Derived from scud_redis_up gauge via PROMETHEUS_PATTERN."
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - "scud_redis_up"
+                - "value"
+                - ""
+
+    # =========================================================================
+    # PgBouncer x6 — explicit ZABBIX_PASSIVE items per instance through the
+    # scud.dbprobe[pgb,pgbouncer_<svc>,<metric>] UserParameter. Each item
+    # returns ONE scalar. cl_waiting is the queue for a server connection on
+    # the admin console :6432 — distinct from app-side scud_db_pool_* metrics.
+    # =========================================================================
+    - uuid: 3f3ef9e82f204d9291ebdaafff7cd821
+      template: "scud-infra-pgbouncer"
+      name: "SCUD Infra PgBouncer"
+      description: "PgBouncer SHOW STATS/POOLS scalars via the scud.dbprobe UserParameter (6 instances, explicit)."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      items:
+        # ---- pgbouncer_user ----
+        - uuid: c9ccdcc713674aafbac50f31376a223e
+          name: "PgBouncer user: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_user,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: daa79cad26aa47b18b70561f866854bb
+          name: "PgBouncer user: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_user,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 2693c9cf55f04081afa7e683a7b917fa
+          name: "PgBouncer user: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_user,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: 3ba944d6b66a472f90cac2d25927801d
+          name: "PgBouncer user: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_user,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        # ---- pgbouncer_locker ----
+        - uuid: 8e5c5f44e1b546d0a410d362ca0fd105
+          name: "PgBouncer locker: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_locker,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 334ab87be5e743b4948fd189618de9c7
+          name: "PgBouncer locker: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_locker,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 3db6ca8d04674350b2f4cf2bb015a2b2
+          name: "PgBouncer locker: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_locker,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: ee3aae24f7d744959f5857550d0d36e0
+          name: "PgBouncer locker: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_locker,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        # ---- pgbouncer_history ----
+        - uuid: 0da34c7df5fc4db39839969afffd509d
+          name: "PgBouncer history: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_history,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 5e2309dfd3754ee4a6cd59cb88320ea4
+          name: "PgBouncer history: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_history,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 5d7e939e4e4e4fd88fd90769fcefb243
+          name: "PgBouncer history: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_history,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: f251d4a27cdf423c9181a72ddb7dd137
+          name: "PgBouncer history: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_history,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        # ---- pgbouncer_auth ----
+        - uuid: 79f35e32bff24c58b6b8c6b3ee0a6bf7
+          name: "PgBouncer auth: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_auth,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 9ef956fc9667477db75ec34fa78f76a6
+          name: "PgBouncer auth: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_auth,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: d6ba9ef00a80476e9d13d53f8bfdbc15
+          name: "PgBouncer auth: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_auth,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: 13788852430a4e0489a3fd554af7d814
+          name: "PgBouncer auth: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_auth,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        # ---- pgbouncer_notification ----
+        - uuid: f76abedab6824ebab14bbdb8136b6102
+          name: "PgBouncer notification: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_notification,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 69bac2e4cb4a465ca01239fbf6d8f056
+          name: "PgBouncer notification: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_notification,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 4e7635d607a14e1590b10fcfd181e8f3
+          name: "PgBouncer notification: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_notification,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: 25828db273e44ef5873dcc5367554fda
+          name: "PgBouncer notification: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_notification,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        # ---- pgbouncer_reports ----
+        - uuid: 5b90cc63a1504d8eb7ab14eb01deacd3
+          name: "PgBouncer reports: clients waiting"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_reports,cl_waiting]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 700070d0a95f452287167f24f2da2803
+          name: "PgBouncer reports: server connections active"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_reports,sv_active]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 3ca03ee9990b4576af1a2e82b7ba6e84
+          name: "PgBouncer reports: max client wait"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_reports,maxwait]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+        - uuid: e4bc25c0d86b4b4a82d5206adef336bf
+          name: "PgBouncer reports: avg query time"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pgb,pgbouncer_reports,avg_query_time]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+          units: s
+
+    # =========================================================================
+    # PostgreSQL x6 — explicit ZABBIX_PASSIVE items per instance through the
+    # scud.dbprobe[pg,postgres_<svc>,<metric>] UserParameter. Each returns ONE
+    # scalar. max_connections is polled at 5m (static); the rest at 30-60s.
+    # history_partition_bytes is added ONLY on postgres_history.
+    # =========================================================================
+    - uuid: de49123ef6a54a3e82c92f023f1825db
+      template: "scud-infra-postgres"
+      name: "SCUD Infra Postgres"
+      description: "PostgreSQL pg_stat_* scalars via the scud.dbprobe UserParameter (6 instances, explicit)."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      macros:
+        - macro: "{$OUTBOX.PENDING.HIGH}"
+          value: "5000"
+          description: "Outbox pending backlog (sustained 10m) above which the backlog-building trigger fires."
+        - macro: "{$OUTBOX.OLDEST.MAX.S}"
+          value: "600"
+          description: "Max age (s) of the oldest undelivered outbox event before delivery is considered stalled."
+        - macro: "{$OUTBOX.BYTES.HIGH}"
+          value: "268435456"
+          description: "Outbox pending payload bytes (256 MiB) above which a dispatcher memory-pressure (OOM precursor) trigger fires."
+      items:
+        # ---- postgres_user ----
+        - uuid: 4a343d1faf0348ea931429beb3fb976c
+          name: "Postgres user: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_user,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: db1ccb45354f496391985f45cacb9c34
+          name: "Postgres user: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_user,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: 725d1463bd794377954ca8e39414a5df
+          name: "Postgres user: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_user,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: d94e5c3119344277bcd5a34933cfe439
+          name: "Postgres user: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_user,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: fae77de759074e1aaec78e4979e836e0
+          name: "Postgres user: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_user,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        # ---- postgres_locker ----
+        - uuid: f8aca7033e1f41e4b49c54f511d2fabb
+          name: "Postgres locker: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: b22366031efe4f509f36a7eda4947f0d
+          name: "Postgres locker: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: 436255830aa549f3b15e80738aa4fb5f
+          name: "Postgres locker: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 1e85af0619634a6bbe8a5e16ca3dbe5e
+          name: "Postgres locker: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: f2da1e176d1c4256b9fb3ad22bbea3b1
+          name: "Postgres locker: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        # ---- outbox (outbound_history_events → history_api), postgres_locker only ----
+        # Очередь доставки событий в history_api. Бэклог/возраст/байты делают
+        # видимым ровно тот класс отказа, что задушил dispatcher (WS-media-хвост):
+        # outbox_pending_bytes — предвестник OOM, outbox_oldest_age_s — «доставка
+        # встала», outbox_deadletter — события, сданные в dead-letter.
+        - uuid: e69f8d67e67347789f83a79e8d2998e1
+          name: "Outbox: pending events"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,outbox_pending]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 492ca3102c3b4b0a8ac9f9e8635f8611
+          name: "Outbox: oldest pending age"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,outbox_oldest_age_s]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        - uuid: e2b39df5cf59416196c908ff89e9bc60
+          name: "Outbox: pending payload bytes"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,outbox_pending_bytes]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: B
+        - uuid: 4e9ae94f9de942e8a177bb4dca1c69c8
+          name: "Outbox: retrying events"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,outbox_retrying]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 695d91d9b71d466dacfeb4ec2cf7ba40
+          name: "Outbox: dead-lettered events"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_locker,outbox_deadletter]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        # ---- postgres_history ----
+        - uuid: b4d57011307046bb8c2acf960174c6cb
+          name: "Postgres history: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 14e6b9bc4fea4006ac4f626cf5cd268d
+          name: "Postgres history: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: 833e1a0cb1d441ec988b83e7369af445
+          name: "Postgres history: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: df69eb4567c34305b3ed2fa6626d9575
+          name: "Postgres history: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 471f784f8d1741cd8a13b08d18b9cfd7
+          name: "Postgres history: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        - uuid: 33421345915a4da6aef8d3bc9f3a32c8
+          name: "Postgres history: partitions total bytes"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,history_partition_bytes]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+          units: B
+          description: "Total bytes of the scud_history monthly partitions (telemetry + security_events); only present on postgres_history."
+        - uuid: 6970564732ab485894d3830ccb8a95d2
+          name: "Postgres history: relay photo frames without event"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_history,history_orphan_media]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          description: "locker_media rows with security_event_uid but no linked security event for over 10 minutes (relay photo frames whose intrusion event never arrived); only present on postgres_history."
+        # ---- postgres_auth ----
+        - uuid: 4e90b2c8a04a4a4b86d469172149a6f4
+          name: "Postgres auth: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_auth,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 56f302d80263412999e7eda0ec66df9e
+          name: "Postgres auth: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_auth,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: d99f0d7f238e48cda8324dfda05a714f
+          name: "Postgres auth: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_auth,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 32d1dd61b5ac411cb4dde13b61148388
+          name: "Postgres auth: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_auth,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: c4cabef06fb343b8aa488d594564ca7e
+          name: "Postgres auth: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_auth,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        # ---- postgres_notification ----
+        - uuid: a4af1232dc72430a9216a31be16bd6f4
+          name: "Postgres notification: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_notification,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: a3f3c52a9f5c4daba368cbfd17b78437
+          name: "Postgres notification: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_notification,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: e54e5359e99b42bfaa18b6f2feece2cf
+          name: "Postgres notification: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_notification,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 002c8ce3fd5c4a48b219ec4684f95282
+          name: "Postgres notification: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_notification,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: e778600d41654c9b89c0ba515592b7f0
+          name: "Postgres notification: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_notification,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+        # ---- postgres_reports ----
+        - uuid: 66db81794ba84a14a52b8031cd8db981
+          name: "Postgres reports: backends in use"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_reports,numbackends]"
+          timeout: 30s
+          delay: 30s
+          value_type: FLOAT
+        - uuid: 34b33dbe75aa40a0b6a8a924df444a64
+          name: "Postgres reports: max_connections"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_reports,max_connections]"
+          timeout: 30s
+          delay: 5m
+          value_type: FLOAT
+        - uuid: 671e8782c45e4a46a93083f33f52c0eb
+          name: "Postgres reports: deadlocks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_reports,deadlocks]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 4835c8294de943cf84486e814f6d2ba9
+          name: "Postgres reports: xact rollbacks"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_reports,xact_rollback]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+        - uuid: 03f455fe1fbe44bf9107153272ffe90b
+          name: "Postgres reports: longest running txn"
+          type: ZABBIX_PASSIVE
+          key: "scud.dbprobe[pg,postgres_reports,longest_txn_seconds]"
+          timeout: 30s
+          delay: 60s
+          value_type: FLOAT
+          units: s
+
+    # =========================================================================
+    # Gateway — Apache reverse proxy. Two layers of visibility:
+    #   * net.tcp.service[http,apache_gateway,80] — coarse up/down on the public
+    #     port (agent-side passive check), kept as-is.
+    #   * mod_status — детальная статистика воркеров/throughput. zabbix_server
+    #     (в backend_net) скрейпит внутренний http://apache_gateway:81/
+    #     server-status?auto HTTP-агент-итемом (master), а dependent-итемы
+    #     вытаскивают поля REGEX/JAVASCRIPT-препроцессингом. Порт 81 НЕ
+    #     публикуется наружу (см. gateway/status.conf) — публичный :80 статистику
+    #     не отдаёт. MPM gateway = prefork: один процесс на соединение, поэтому
+    #     BusyWorkers у предела MaxRequestWorkers (slots_total, закреплён = 150 в
+    #     gateway/mpm.conf) = потолок одновременных соединений, включая
+    #     WebSocket-туннели.
+    #
+    # ОГРАНИЧЕНИЕ: mod_status НЕ видит HTTP-коды ответов, поэтому edge-ошибки
+    # шлюза (502/503/504 от недоступного backend или исчерпания пула воркеров)
+    # здесь невидимы. Per-service 5xx считается в scud_http_requests_5xx
+    # (template-scud-services.yaml). Отдельный gateway-edge 5xx-счётчик из
+    # access-лога (через syslog-ng/agent2) — отдельная задача (follow-up).
+    # =========================================================================
+    - uuid: 5769daa8a44d4fb981451a92365651d5
+      template: "scud-infra-gateway"
+      name: "SCUD Infra Gateway"
+      description: "Apache reverse-proxy: reachability (:80) + mod_status worker/throughput stats (internal :81)."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      macros:
+        - macro: "{$GATEWAY.WORKERS.HIGH.PCT}"
+          value: "85"
+          description: "Worker-pool utilisation %% above which the saturation trigger fires."
+      items:
+        - uuid: f58b8772dbe74ad0aaeb59d3fc182e4f
+          name: "Gateway: HTTP service reachable"
+          type: ZABBIX_PASSIVE
+          key: "net.tcp.service[http,apache_gateway,80]"
+          delay: 30s
+          value_type: UNSIGNED
+          description: "1 if the Apache gateway answers HTTP on :80, else 0."
+
+        # ---- mod_status master: raw ?auto page (internal port 81) -------------
+        - uuid: d76c85098aa14d56a76983df8ec72e8c
+          name: "Gateway: server-status raw"
+          type: HTTP_AGENT
+          key: "scud.gateway.status.raw"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://apache_gateway:81/server-status?auto"
+          status_codes: "200"
+          timeout: 10s
+          description: "Master item: machine-readable mod_status (?auto) from the internal-only :81 endpoint. Dependent items parse individual fields."
+
+        # ---- Workers --------------------------------------------------------
+        - uuid: b9dac50e8d0248309dcaa0e53c804e5f
+          name: "Gateway: busy workers"
+          type: DEPENDENT
+          key: "scud.gateway.busy_workers"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Processes actively handling a connection (prefork: ≈ concurrent connections, incl. WS tunnels). Floor ≈1: the mod_status scrape itself occupies one worker, so an otherwise-idle gateway never reads 0."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "BusyWorkers: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: c00bff9ac7dc4a678440e8edaec736b2
+          name: "Gateway: idle workers"
+          type: DEPENDENT
+          key: "scud.gateway.idle_workers"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "IdleWorkers: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 8d319b634b954e36955064225f5ff6e3
+          name: "Gateway: graceful workers"
+          type: DEPENDENT
+          key: "scud.gateway.graceful_workers"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Workers finishing in-flight requests during a graceful restart."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "GracefulWorkers: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 07658fb00be746cf856b8c6354344fb2
+          name: "Gateway: worker slots total (MaxRequestWorkers)"
+          type: DEPENDENT
+          key: "scud.gateway.slots_total"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Scoreboard length = hard ceiling of concurrent prefork processes. Pinned to MaxRequestWorkers (150) via gateway/mpm.conf so it == the real connection ceiling."
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?m[1].length:0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: efd5c4e5ba1345ff91c325da64bc1ceb
+          name: "Gateway: worker utilisation %"
+          type: DEPENDENT
+          key: "scud.gateway.worker_util_pct"
+          value_type: FLOAT
+          units: "%"
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "BusyWorkers / slots_total * 100. 100%% = MaxRequestWorkers reached → new connections queue/refuse."
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var b=value.match(/BusyWorkers: (\\d+)/),s=value.match(/Scoreboard: (\\S+)/);if(!b||!s)return 0;var n=s[1].length;return n>0?Math.round(b[1]/n*10000)/100:0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+
+        # ---- Throughput / latency ------------------------------------------
+        - uuid: 7a18086814f845f98b241a47aa4dc733
+          name: "Gateway: requests/sec (lifetime avg)"
+          type: DEPENDENT
+          key: "scud.gateway.req_per_sec"
+          value_type: FLOAT
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Apache ReqPerSec — Total Accesses / Uptime (lifetime average, not live rate)."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "ReqPerSec: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 141ccf77d46c4d9387b3cc585efb7ae2
+          name: "Gateway: requests/sec (live)"
+          type: DEPENDENT
+          key: "scud.gateway.req_rate"
+          value_type: FLOAT
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Per-second delta of Total Accesses — the live request rate."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "Total Accesses: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ""
+        - uuid: f15d4c3ad2f340f6a5465a3980ca7e2e
+          name: "Gateway: bytes/sec"
+          type: DEPENDENT
+          key: "scud.gateway.bytes_per_sec"
+          value_type: FLOAT
+          units: Bps
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "BytesPerSec: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 2e8e1eb270ab4cbea2c3e9b030473399
+          name: "Gateway: bytes/request"
+          type: DEPENDENT
+          key: "scud.gateway.bytes_per_req"
+          value_type: FLOAT
+          units: B
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "BytesPerReq: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 2f91813d8c5e42959cfcecd7e92e49a6
+          name: "Gateway: avg request duration (lifetime, incl. WS tunnels)"
+          type: DEPENDENT
+          key: "scud.gateway.duration_per_req"
+          value_type: FLOAT
+          units: ms
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Apache DurationPerReq — LIFETIME mean over Total Accesses. On a WS-carrying proxy it is inflated by closed 3600 s device tunnels, so it is NOT live API latency — use the per-service scud_http_request_duration_seconds for that."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "DurationPerReq: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 9b2dd0e48287446bb379502da3c0f1a0
+          name: "Gateway: total accesses"
+          type: DEPENDENT
+          key: "scud.gateway.total_accesses"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Cumulative requests served since (graceful) start."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "Total Accesses: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: e016c771479449b5b0a71a4a89fad1fa
+          name: "Gateway: total kBytes"
+          type: DEPENDENT
+          key: "scud.gateway.total_kbytes"
+          value_type: UNSIGNED
+          units: B
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Cumulative kBytes served (units B with kB multiplier)."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "Total kBytes: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: MULTIPLIER
+              parameters:
+                - "1024"
+
+        # ---- Process / host load -------------------------------------------
+        - uuid: 30f014e4a6514bf8be0a8edff8e90a7b
+          name: "Gateway: CPU load"
+          type: DEPENDENT
+          key: "scud.gateway.cpu_load"
+          value_type: FLOAT
+          units: "%"
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Apache CPULoad — % CPU used by Apache workers (own accounting, not host)."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "CPULoad: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 92602988aa494c8dae2cb68957c06c2e
+          name: "Gateway: uptime"
+          type: DEPENDENT
+          key: "scud.gateway.uptime"
+          value_type: UNSIGNED
+          units: uptime
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Seconds since the last (graceful) restart — a drop signals a restart/crash."
+          preprocessing:
+            # (?m)^ anchors to the line starting with "Uptime:" so it does NOT
+            # match "ServerUptime:" / "ServerUptimeSeconds:". A literal \n in the
+            # pattern must be avoided — Zabbix stores preprocessing params as a
+            # newline-separated string, so an embedded newline splits into
+            # phantom extra params and configuration.import rejects it.
+            - type: REGEX
+              parameters:
+                - "(?m)^Uptime: ([0-9]+)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 6995e660afe342598cfe1137813a1ae3
+          name: "Gateway: host load average (1m)"
+          type: DEPENDENT
+          key: "scud.gateway.load1"
+          value_type: FLOAT
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Load1 from mod_status — 1-minute system load average as seen by the gateway."
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - "Load1: ([0-9.]+(?:[eE][+-]?[0-9]+)?)"
+                - '\1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+
+        # ---- Scoreboard breakdown (count of each worker state) --------------
+        # PARTIAL breakdown — the operationally useful states only. Startup/
+        # graceful states (S/D/L/G/I) are omitted, so sb_* do NOT sum to
+        # slots_total; use worker_util_pct / busy_workers for saturation, not a
+        # sum of these.
+        - uuid: 74e524c325e54523b5d655de4b763b2a
+          name: "Gateway: workers sending reply (W)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_sending"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Scoreboard 'W' — workers actively sending a reply / proxying (incl. live WS tunnels)."
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('W').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: e27c6dfb23874185a95a78add539f153
+          name: "Gateway: workers waiting (_)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_waiting"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Scoreboard '_' — idle workers waiting for a connection."
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('_').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: f4becfc94add4c4684f904c818af8ae3
+          name: "Gateway: workers reading request (R)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_reading"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('R').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: dca496c0a6454690946c5ea2fcb0a1e4
+          name: "Gateway: workers keepalive (K)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_keepalive"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('K').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 0c8d0c18b4de4a90a0bd4dcefd9cab5f
+          name: "Gateway: workers closing (C)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_closing"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('C').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: b88e4338a6a64fc18370e64276c2a3dd
+          name: "Gateway: open slots (.)"
+          type: DEPENDENT
+          key: "scud.gateway.sb_open"
+          value_type: UNSIGNED
+          master_item:
+            key: "scud.gateway.status.raw"
+          description: "Scoreboard '.' — unused worker slots; headroom before MaxRequestWorkers."
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - "var m=value.match(/Scoreboard: (\\S+)/);return m?(m[1].split('.').length-1):0;"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+
+    # =========================================================================
+    # Backup — статус последнего цикла pg_dump, записываемый backup.sh.
+    # Агент читает /backups/last_run_status (том backup_data, :ro) через
+    # UserParameter scud.backup.status (zabbix_agent2.userparams.conf).
+    # ZABBIX_ACTIVE: агент сам отправляет значение каждый час; если данных
+    # нет >25 ч (90000 с) — сработает триггер "backup не выполнялся".
+    # =========================================================================
+    - uuid: 99162cd034944a5991c2248d055804e0
+      template: "scud-infra-backup"
+      name: "SCUD Infra Backup"
+      description: "Мониторинг последнего цикла резервного копирования через UserParameter scud.backup.status."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      items:
+        - uuid: 32440b89f2934a87a8ecd9dc337655ef
+          name: "Backup: статус последнего цикла"
+          type: ZABBIX_ACTIVE
+          key: "scud.backup.status"
+          delay: 3600s
+          history: 30d
+          value_type: TEXT
+          description: "OK <iso-ts> при успехе; FAIL <dbs> <iso-ts> при сбоях; UNKNOWN no-status-file если файл ещё не создан."
+
+    # =========================================================================
+    # Host — OS-level resources of the scud-dev VM. The zabbix_agent2 container
+    # runs with pid:host and the host root mounted at /hostfs:ro, so the built-in
+    # system.*/vm.*/vfs.fs.* keys read the HOST (not the container).
+    # =========================================================================
+    - uuid: 6926e10bf09b4797926f9f2a5598506a
+      template: "scud-infra-host"
+      name: "SCUD Infra Host"
+      description: "OS-уровень ВМ scud-dev: CPU, load, память, диск, uptime (built-in agent2 keys, pid:host + /hostfs)."
+      groups:
+        - name: "Templates/SCUD/Infra"
+      items:
+        - uuid: 3e1d84d2beb746a7976c3bd87d5a7dc4
+          name: "Host: CPU utilisation"
+          type: ZABBIX_PASSIVE
+          key: "system.cpu.util"
+          delay: 60s
+          value_type: FLOAT
+          units: "%"
+        - uuid: 2b03a2b22aa8467d9f1647adaa878d90
+          name: "Host: CPU load average (1m)"
+          type: ZABBIX_PASSIVE
+          key: "system.cpu.load[all,avg1]"
+          delay: 60s
+          value_type: FLOAT
+        - uuid: d5c096e693b444c7a8a1bc00da9f4cdc
+          name: "Host: memory total"
+          type: ZABBIX_PASSIVE
+          key: "vm.memory.size[total]"
+          delay: 300s
+          value_type: UNSIGNED
+          units: B
+        - uuid: fb05b10ab9504ea88cc6d861f2199f38
+          name: "Host: memory available"
+          type: ZABBIX_PASSIVE
+          key: "vm.memory.size[available]"
+          delay: 60s
+          value_type: UNSIGNED
+          units: B
+        - uuid: 6793886e3d8748ccb2bd6b6595e1f022
+          name: "Host: memory available %"
+          type: ZABBIX_PASSIVE
+          key: "vm.memory.size[pavailable]"
+          delay: 60s
+          value_type: FLOAT
+          units: "%"
+        - uuid: 4bec429c2a694683b718d6bd3995145b
+          name: "Host: disk total (/)"
+          type: ZABBIX_PASSIVE
+          key: "vfs.fs.size[/hostfs,total]"
+          delay: 300s
+          value_type: UNSIGNED
+          units: B
+        - uuid: a622d5eb76484a649feb3da55b4def41
+          name: "Host: disk used (/)"
+          type: ZABBIX_PASSIVE
+          key: "vfs.fs.size[/hostfs,used]"
+          delay: 300s
+          value_type: UNSIGNED
+          units: B
+        - uuid: 9806811f17ba4091bf3fd21fa27a254a
+          name: "Host: disk used % (/)"
+          type: ZABBIX_PASSIVE
+          key: "vfs.fs.size[/hostfs,pused]"
+          delay: 300s
+          value_type: FLOAT
+          units: "%"
+        - uuid: 40068a3c6b8c4274bcf63f4e020a3bca
+          name: "Host: uptime"
+          type: ZABBIX_PASSIVE
+          key: "system.uptime"
+          delay: 300s
+          value_type: UNSIGNED
+          units: uptime
+
+  # ===========================================================================
+  # Top-level triggers (Zabbix 7.0 YAML: triggers live under zabbix_export,
+  # NOT under individual templates, and NOT as trigger_prototypes — R4).
+  # ===========================================================================
+  triggers:
+    # ---- Host (OS resources of the scud-dev VM) ----
+    - uuid: 5cd9ba9f029c4c5aa7212a967585f41f
+      name: "Host CPU utilisation high (>90% sustained 5m)"
+      priority: HIGH
+      expression: "min(/scud-infra-host/system.cpu.util,5m)>90"
+    - uuid: aef45d01bdbc4147b3b84a14d10e05ea
+      name: "Host disk space low (root >90% used)"
+      priority: HIGH
+      expression: "last(/scud-infra-host/vfs.fs.size[/hostfs,pused])>90"
+    - uuid: 025e3c2f600f49dc998b6737ee065589
+      name: "Host memory low (<10% available)"
+      priority: AVERAGE
+      expression: "max(/scud-infra-host/vm.memory.size[pavailable],5m)<10"
+
+    # ---- Redis (fallback: scud_redis_up reachability only) ----
+    - uuid: 5d9b4b0643f147559f0a31f45cd2b8e3
+      name: "Redis unreachable (scud_redis_up=0)"
+      priority: HIGH
+      expression: "last(/scud-infra-redis/scud.infra.redis.up)<1"
+
+    # ---- Gateway ----
+    - uuid: f17608e68f9a40a69a5f73635e09ef32
+      name: "Gateway down (Apache HTTP :80 unreachable 2m)"
+      priority: HIGH
+      expression: "max(/scud-infra-gateway/net.tcp.service[http,apache_gateway,80],2m)=0"
+    - uuid: 5231ce0fbe2d459a9954a755ba9b2cdf
+      name: "Gateway worker pool saturating (>{$GATEWAY.WORKERS.HIGH.PCT}% for 5m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-gateway/scud.gateway.worker_util_pct,5m)>{$GATEWAY.WORKERS.HIGH.PCT}"
+      description: "Busy prefork workers near MaxRequestWorkers. New connections — especially WebSocket tunnels, one worker each — will start queuing or being refused."
+    - uuid: a137ec548d2d42bbaf8ca60698958f82
+      name: "Gateway worker pool exhausted (>95% for 2m)"
+      priority: HIGH
+      expression: "min(/scud-infra-gateway/scud.gateway.worker_util_pct,2m)>95"
+      description: "Almost all worker slots busy — the gateway is at its concurrency ceiling and rejecting/queueing new connections."
+    - uuid: 4a052fb5877a4e5ab4bc6b73f09e9878
+      name: "Gateway server-status scrape failing (no data 5m)"
+      priority: AVERAGE
+      # nodata() targets a history-bearing dependent, NOT the master
+      # scud.gateway.status.raw (history:"0" — nodata on a no-history item is
+      # unreliable). busy_workers updates on every successful scrape.
+      expression: "nodata(/scud-infra-gateway/scud.gateway.busy_workers,5m)=1"
+      description: "mod_status (:81) not answering — worker/throughput metrics are stale even if the public :80 is still up."
+
+    # ---- PgBouncer: clients waiting for a server connection (sustained 2m) ----
+    - uuid: 5d147ab8d2054116bebed799f0c49dc1
+      name: "PgBouncer user clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_user,cl_waiting],2m)>0"
+    - uuid: 0dd8603621b64003abea7f67b6c3e7b8
+      name: "PgBouncer locker clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_locker,cl_waiting],2m)>0"
+    - uuid: 40e3e066052a4eac95e9f4ba2ae1de7f
+      name: "PgBouncer history clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_history,cl_waiting],2m)>0"
+    - uuid: 7343d6c09c8643c4b74ae29c74570b8a
+      name: "PgBouncer auth clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_auth,cl_waiting],2m)>0"
+    - uuid: 42f2159f51954c09a4f154bea254f9ba
+      name: "PgBouncer notification clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_notification,cl_waiting],2m)>0"
+    - uuid: 296d31e8b43b41ddaeffc4179c89a1e6
+      name: "PgBouncer reports clients waiting for a server connection (sustained 2m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-pgbouncer/scud.dbprobe[pgb,pgbouncer_reports,cl_waiting],2m)>0"
+
+    # ---- Outbox (outbound_history_events → history_api) resilience ----
+    # Делают видимым класс отказа, задушивший dispatcher (WS-media-хвост):
+    # бэклог растёт, доставка встала, очередь пухнет по байтам (OOM-предвестник),
+    # события сданы в dead-letter. Все четыре — на scud-infra-postgres
+    # (outbox-таблица в scud_lockers, dbprobe[pg,postgres_locker,...]).
+    - uuid: 3353d5b54e874a219e448d6579880a5b
+      name: "Outbox backlog building (>{$OUTBOX.PENDING.HIGH} pending for 10m)"
+      priority: AVERAGE
+      expression: "min(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,outbox_pending],10m)>{$OUTBOX.PENDING.HIGH}"
+      description: "Undelivered history events are piling up faster than the dispatcher drains them — history_api slow/down or throughput too low."
+    - uuid: c5aa32b98d4943d29d49273f2138f52f
+      name: "Outbox delivery stalled (oldest pending >{$OUTBOX.OLDEST.MAX.S}s for 5m)"
+      priority: HIGH
+      expression: "min(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,outbox_oldest_age_s],5m)>{$OUTBOX.OLDEST.MAX.S}"
+      description: "The oldest undelivered event is older than the SLO — telemetry/media are not reaching history_api; the dispatcher is stuck or blocked."
+    - uuid: 3cfa3ca4693447aaba255c8bf4305a44
+      name: "Outbox pending bytes high (>{$OUTBOX.BYTES.HIGH} for 5m)"
+      priority: HIGH
+      expression: "min(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,outbox_pending_bytes],5m)>{$OUTBOX.BYTES.HIGH}"
+      description: "Pending payload bytes (mostly base64 media) are large — the dispatcher batch can load this into memory and OOM. Precursor to the failure that froze delivery."
+    - uuid: 1f647c47b4674f95a37c66dc1b1f8532
+      name: "Outbox dead-letter events present"
+      priority: AVERAGE
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,outbox_deadletter])>0"
+      description: "Events were parked in dead-letter after exhausting delivery attempts — poison events or a long history_api outage. Needs manual review/replay."
+    - uuid: 675af89767b34063943acbeeceea153a
+      name: "Relay photo frames without intrusion event for 30m"
+      priority: WARNING
+      expression: "min(/scud-infra-postgres/scud.dbprobe[pg,postgres_history,history_orphan_media],30m)>0"
+      description: "Relay photo frames reached history_api but their intrusion event did not — usually the security event is dead-lettered in the locker outbox. The frames stay invisible on the incidents page until the event is delivered."
+
+    # ---- Postgres: backends near max_connections ----
+    - uuid: 480c58137dfd4cbdb5868a45bcd30e82
+      name: "Postgres user backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_user,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_user,max_connections])*0.85"
+    - uuid: 34950e9226d8482db860e44921d1d56c
+      name: "Postgres locker backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,max_connections])*0.85"
+    - uuid: 031aa52874a142739706e216c3352296
+      name: "Postgres history backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_history,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_history,max_connections])*0.85"
+    - uuid: b00ae0ce3c83447997a59c9cf9cc60ea
+      name: "Postgres auth backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_auth,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_auth,max_connections])*0.85"
+    - uuid: 82e7f0ca8bae4244b92d2fbba3d31210
+      name: "Postgres notification backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_notification,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_notification,max_connections])*0.85"
+    - uuid: d2e1884cdb174d458ed2f0baaa3256ef
+      name: "Postgres reports backends near max_connections"
+      priority: HIGH
+      expression: "last(/scud-infra-postgres/scud.dbprobe[pg,postgres_reports,numbackends])>last(/scud-infra-postgres/scud.dbprobe[pg,postgres_reports,max_connections])*0.85"
+
+    # ---- Postgres: deadlocks rising ----
+    - uuid: aa72a40ac0444016b064b8a592c4e73b
+      name: "Postgres user deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_user,deadlocks])>0"
+    - uuid: a8817b004c0d4f7e80a551fae0979df1
+      name: "Postgres locker deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_locker,deadlocks])>0"
+    - uuid: e3d9cf7637274c099100833d8a93bfee
+      name: "Postgres history deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_history,deadlocks])>0"
+    - uuid: 4aca0eb34cab4266bd0d517c2882407f
+      name: "Postgres auth deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_auth,deadlocks])>0"
+    - uuid: 84fd3f3b9c8a408d8272181a319bce86
+      name: "Postgres notification deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_notification,deadlocks])>0"
+    - uuid: a697708cbae345d48cfeb7109a960382
+      name: "Postgres reports deadlocks rising"
+      priority: HIGH
+      expression: "change(/scud-infra-postgres/scud.dbprobe[pg,postgres_reports,deadlocks])>0"
+
+    # ---- Backup ----
+    - uuid: 14faf5a3131b470ab938ab2b2c82f84e
+      name: "Backup завершился с ошибкой (FAIL в статус-файле)"
+      priority: HIGH
+      expression: "find(/scud-infra-backup/scud.backup.status,#1,\"like\",\"FAIL\")=1"
+    - uuid: 0285fe098b2d4f10b16e13ee56a72efc
+      name: "Backup не выполнялся более 25 часов"
+      priority: AVERAGE
+      expression: "nodata(/scud-infra-backup/scud.backup.status,90000)=1"

@@ -1,0 +1,68 @@
+# Общие переиспользуемые поля для всех схем OpenAPI
+# Используется для обеспечения консистентности и DRY-принципа
+
+# ============================================================================
+# UUID ID поля
+# ============================================================================
+
+LockerId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор шкафа
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+SensorId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор датчика
+  example: "660e8400-e29b-41d4-a716-446655440111"
+
+ThresholdId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор порогового значения
+  example: "770e8400-e29b-41d4-a716-446655440222"
+
+CommandId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор команды
+  example: "880e8400-e29b-41d4-a716-446655440333"
+
+# ============================================================================
+# Integer ID поля
+# ============================================================================
+
+SensorTypeId:
+  type: integer
+  format: int32
+  description: Уникальный идентификатор типа датчика
+  minimum: 1
+  example: 1
+
+UserId:
+  type: integer
+  format: int64
+  description: ID пользователя
+  minimum: 1
+  example: 1
+
+NullableUserId:
+  allOf:
+    - $ref: '#/UserId'
+    - nullable: true
+
+# ============================================================================
+# Временные метки
+# ============================================================================
+
+Timestamp:
+  type: string
+  format: date-time
+  description: Дата и время в формате ISO 8601
+  example: "2024-01-15T10:30:00Z"
+
+NullableTimestamp:
+  allOf:
+    - $ref: '#/Timestamp'
+    - nullable: true

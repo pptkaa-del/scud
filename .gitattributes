@@ -1,0 +1,57 @@
+# Унификация line endings: весь backend и эмулятор исполняются в Linux-
+# контейнерах. На Windows-чекауте с `core.autocrlf=true` git конвертирует
+# LF→CRLF, и Linux-ядро падает на shebang `#!/bin/bash\r`. `.gitattributes`
+# фиксирует EOL на уровне репозитория и побеждает любой autocrlf.
+
+# По умолчанию: автодетект text/binary, нормализация text → LF при checkout.
+* text=auto eol=lf
+
+# ----------------------------------------------------------------------------
+# Linux-only — MUST be LF (исполняются внутри контейнеров)
+# ----------------------------------------------------------------------------
+*.sh    text eol=lf
+*.lua   text eol=lf
+*.py    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.sql   text eol=lf
+*.conf  text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf
+*.ini   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+Dockerfile     text eol=lf
+Dockerfile.*   text eol=lf
+*.dockerfile   text eol=lf
+
+# ----------------------------------------------------------------------------
+# Windows-only — MUST be CRLF (запускаются на хосте Windows-юзеров)
+# ----------------------------------------------------------------------------
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# ----------------------------------------------------------------------------
+# Бинарники — без нормализации, без diff
+# ----------------------------------------------------------------------------
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.tar   binary
+*.tar.gz binary
+*.tgz   binary
+*.gz    binary
+*.dump  binary
+
+# ----------------------------------------------------------------------------
+# Вендоренный upstream-исходник брокера — компилируется в образ как есть.
+# Исключаем из языковой статистики GitHub (781 файл C исказил бы разбивку).
+# EOL не пинуем: дерево целиком LF, а бинарники (.png/.ico/.test-db) git
+# детектит по NUL — дефолтного `* text=auto eol=lf` достаточно, байты сохраняются.
+# ----------------------------------------------------------------------------
+backend/mqtt/vendor/mosquitto-2.0.23/** linguist-vendored

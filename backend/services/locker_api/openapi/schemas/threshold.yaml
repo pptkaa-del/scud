@@ -1,0 +1,127 @@
+Threshold:
+  type: object
+  description: Пороговое значение для датчика
+  required:
+    - id
+    - sensor_id
+    - created_at
+    - updated_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/ThresholdId'
+    sensor_id:
+      $ref: './common_fields.yaml#/SensorId'
+    min_value:
+      type: number
+      format: double
+      nullable: true
+      description: Минимальное допустимое значение
+      example: -10.0
+    max_value:
+      type: number
+      format: double
+      nullable: true
+      description: Максимальное допустимое значение
+      example: 50.0
+    fixed_value:
+      type: string
+      nullable: true
+      description: Фиксированное допустимое значение (для дискретных датчиков)
+      example: "closed"
+    is_active:
+      type: boolean
+      description: Активно ли пороговое значение
+      example: true
+    description:
+      type: string
+      nullable: true
+      description: Описание порогового значения
+      example: "Допустимая температура от -10°C до +50°C"
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время создания записи
+    updated_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время последнего обновления
+    created_by:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: ID пользователя, создавшего запись
+    updated_by:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: ID пользователя, последним обновившего запись
+
+ThresholdCreate:
+  type: object
+  description: >
+    Данные для создания порогового значения.
+    Необходимо указать хотя бы одно из: min_value, max_value, fixed_value.
+  properties:
+    min_value:
+      type: number
+      format: double
+      description: Минимальное значение (опционально)
+      example: -10.0
+    max_value:
+      type: number
+      format: double
+      description: Максимальное значение (опционально)
+      example: 50.0
+    fixed_value:
+      type: string
+      description: Фиксированное допустимое значение (для дискретных датчиков)
+      example: "closed"
+    description:
+      type: string
+      description: Описание
+      example: "Допустимый диапазон температуры"
+
+ThresholdUpdate:
+  type: object
+  description: Данные для обновления порогового значения
+  properties:
+    min_value:
+      type: number
+      format: double
+      nullable: true
+      description: Новое минимальное значение
+      example: -15.0
+    max_value:
+      type: number
+      format: double
+      nullable: true
+      description: Новое максимальное значение
+      example: 55.0
+    fixed_value:
+      type: string
+      nullable: true
+      description: Новое фиксированное значение
+      example: "open"
+    description:
+      type: string
+      description: Новое описание
+      example: "Обновленный диапазон температуры"
+
+ThresholdListResponse:
+  type: object
+  description: Список пороговых значений датчика с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Threshold'
+    total:
+      type: integer
+      example: 3
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0

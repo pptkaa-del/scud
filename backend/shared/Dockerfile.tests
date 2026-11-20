@@ -1,0 +1,51 @@
+FROM registry.astralinux.ru/library/astra/ubi18-python311:1.8.5 AS production
+LABEL authors="lokotkov"
+
+RUN sed -i '/extended/d' /etc/apt/sources.list \
+    && apt update \
+    && apt dist-upgrade -y \
+    && apt install -y --no-install-recommends \
+                   python3-dacite \
+                   python3-prometheus-client \
+                   python3-psycopg2 \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Контекст сборки — backend/. shared/ несёт в себе vendored gmqtt
+# (shared/_vendor/gmqtt) — никакого pip, пакет импортируется из исходников.
+COPY shared /app/shared
+
+WORKDIR /app/shared
+
+ENTRYPOINT ["pytest", "-vv", "tests"]
+
+# === test stage — coverage tooling из Astra extended. ========================
+# Инварианты multi-stage: production не содержит extended; extended
+# подключается только здесь, ровно под python3-coverage/python3-pytest-cov,
+# и сразу удаляется. target обязателен в compose (shared_tests → test).
+FROM production AS test
+# python3-pytest + python3-tornado — сертифицированы (main). pytest нужен для
+# прогона тестов; tornado — для unit-тестов shared.http.retry_client (он
+# импортирует tornado.httpclient на уровне модуля). Ставятся из main отдельным
+# слоем; coverage-tooling — из extended ниже. production-стадия pytest не несёт.
+RUN apt update \
+    && apt install -y --no-install-recommends \
+                   python3-pytest \
+                   python3-tornado \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+RUN echo 'deb https://download.astralinux.ru/astra/frozen/1.8_x86-64/1.8.5/extended-repository 1.8_x86-64 main contrib non-free' \
+        > /etc/apt/sources.list.d/extended.list \
+    && apt update \
+    && apt install -y --no-install-recommends \
+                   python3-coverage \
+                   python3-pytest-cov \
+    && rm /etc/apt/sources.list.d/extended.list \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*

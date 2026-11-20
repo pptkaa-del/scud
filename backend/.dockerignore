@@ -1,0 +1,32 @@
+# Build-контекст всех backend-сервисов — backend/ (context: . в
+# docker-compose.yaml). Исключаем из контекста то, что не должно попадать
+# ни в один образ: секреты, coverage-артефакты, кэши, git-метаданные.
+# ВАЖНО: services/*/tests НЕ исключаем — test-стадия Dockerfile их копирует.
+
+# Секреты (bind-mount в рантайме, в образе им не место).
+secrets/
+.env
+.env.*
+
+# Coverage-артефакты (bind-mount из *_tests контейнеров).
+.coverage-data/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage.combined.xml
+
+# Python-кэши и байткод.
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# VCS.
+.git/
+.gitignore
+
+# Бэкап-дампы (если кто-то локально клал их в дерево).
+*.dump

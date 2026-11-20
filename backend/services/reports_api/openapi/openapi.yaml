@@ -1,0 +1,689 @@
+openapi: 3.2.0
+info:
+  title: Reports API
+  description: |
+    API асинхронной генерации отчётов системы ScudDocs (СКУД).
+
+    Сервис работает по схеме «поставил задачу → опросил статус → скачал файл»:
+
+    1. `POST /api/v1/reports` ставит задачу в очередь (status `pending`) и сразу
+       возвращает `202 Accepted` с идентификатором задачи. Файл ещё не готов.
+    2. Фоновый воркер генерирует файл и переводит задачу в `ready`, проставляя
+       срок жизни ссылки (`expires_at`).
+    3. Клиент опрашивает `GET /api/v1/report/{id}` (или список
+       `GET /api/v1/reports`) до статуса `ready`, затем скачивает файл через
+       `GET /api/v1/report/{id}/download`.
+    4. По истечении TTL (`REPORT_LINK_TTL_SECONDS`, по умолчанию 24 ч) файл
+       удаляется фоновым воркером, задача помечается `expired`, а скачивание
+       начинает отдавать `410 Gone`.
+
+    Все маршруты доступны за Apache gateway и требуют роли OPERATOR или выше
+    (проверяется в ACM). Ошибки возвращаются в формате RFC 7807
+    (`application/problem+json`).
+  version: 1.0.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8888/api/v1
+    description: Development server
+  - url: https://api.scuddocs.com/api/v1
+    description: Production server
+
+security:
+  - RemoteUser: []
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+
+  /live:
+    get:
+      tags:
+        - health
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - health
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                required: [status, db]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+
+  /reports:
+    post:
+      summary: Поставить задачу на генерацию отчёта
+      description: |
+        Создаёт задачу генерации отчёта и помещает её в очередь (status
+        `pending`). Возвращает `202 Accepted` немедленно — файл генерируется
+        асинхронно фоновым воркером.
+
+        `report_type` должен быть зарегистрирован в реестре генераторов;
+        `params` валидируются конкретным генератором. Для `locker_open`
+        обязательны `date_from` и `date_to` (ISO-8601 datetime), причём
+        `date_from` строго меньше `date_to`.
+      tags:
+        - reports
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '202':
+          description: Задача принята в очередь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportJobCreated'
+        '400':
+          description: Неизвестный report_type или невалидные params
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    get:
+      summary: Список задач генерации отчётов
+      description: |
+        Постраничный список задач с опциональной фильтрацией по статусу и типу
+        отчёта, а также поиском по имени.
+
+        Видимость скоупится по владельцу (`requested_by`): обычная роль
+        (operator/worker) видит только свои задачи, и `total` отражает только
+        их. Роль administrator (заголовок `X-Remote-Role`) видит задачи всех
+        пользователей.
+      tags:
+        - reports
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Фильтр по статусу задачи
+          schema:
+            $ref: '#/components/schemas/ReportStatus'
+        - name: report_type
+          in: query
+          required: false
+          description: Фильтр по типу отчёта
+          schema:
+            type: string
+            example: locker_open
+        - name: q
+          in: query
+          required: false
+          description: |
+            Подстрочный поиск (без учёта регистра) по имени отчёта. Значение
+            обрезается по краям (strip); пустая строка/пробелы — фильтр не применяется.
+            LIKE-метасимволы %, _ и \ экранируются и ищутся как литералы.
+            Превышение maxLength -> 400 (ProblemDetails, поле q).
+          schema:
+            type: string
+            maxLength: 255
+            example: квартальный
+        - name: limit
+          in: query
+          required: false
+          description: Максимум записей на страницу
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          required: false
+          description: Смещение от начала выборки
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Постраничный список задач
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReportJobs'
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /report/{id}:
+    get:
+      summary: Получить задачу по id (poll-эндпоинт)
+      description: |
+        Возвращает текущее состояние задачи. Используется клиентом для опроса
+        статуса: `pending` → `running` → `ready` (или `failed`/`expired`).
+
+        Доступ скоупится по владельцу (`requested_by`): чужая задача отдаёт
+        `404` (не `403` — существование чужого ресурса не раскрывается). Роль
+        administrator (`X-Remote-Role`) имеет доступ к любой задаче.
+      tags:
+        - reports
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      responses:
+        '200':
+          description: Состояние задачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportJob'
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Задача не найдена
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      summary: Переименовать отчёт
+      description: |
+        Устанавливает или изменяет человекочитаемое имя задачи (`name`).
+        Имя обрезается по краям; обязательно, непустое после обрезки и не
+        длиннее 255 символов. Возвращает полное обновлённое состояние задачи.
+
+        Скоупится по владельцу (`requested_by`): чужая задача отдаёт `404`
+        (не `403`). Роль administrator (`X-Remote-Role`) переименовывает любую.
+      tags:
+        - reports
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportRequest'
+      responses:
+        '200':
+          description: Имя обновлено, возвращено состояние задачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportJob'
+        '400':
+          description: Отсутствует, пустое или слишком длинное имя
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Задача не найдена
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      summary: Удалить (soft-expire) задачу и её файл
+      description: |
+        Помечает задачу `expired` и удаляет сгенерированный файл с диска
+        (если он есть). Идемпотентна по эффекту. Тело ответа отсутствует.
+
+        Скоупится по владельцу (`requested_by`): чужая задача отдаёт `404`
+        (не `403`) и не помечается expired. Роль administrator (`X-Remote-Role`)
+        удаляет любую.
+      tags:
+        - reports
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      responses:
+        '204':
+          description: Задача помечена expired, файл удалён
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Задача не найдена
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /report/{id}/download:
+    get:
+      summary: Скачать готовый файл отчёта
+      description: |
+        Отдаёт бинарный файл отчёта с корректными `Content-Type` и
+        `Content-Disposition: attachment`.
+
+        - `409 Conflict` — отчёт ещё не готов (status `pending` или `running`).
+        - `410 Gone` — отчёт `failed`/`expired` либо файл отсутствует на диске
+          (например, истёк TTL и файл удалён воркером).
+        - `404 Not Found` — задача не найдена либо принадлежит другому
+          пользователю (скоуп по `requested_by`; administrator скачивает любой).
+      tags:
+        - reports
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      responses:
+        '200':
+          description: |
+            Бинарный файл отчёта. Заголовок `Content-Disposition: attachment;
+            filename="..."` содержит имя файла. Content-Type соответствует
+            формату отчёта (для `locker_open` — XLSX).
+          headers:
+            Content-Disposition:
+              description: Имя файла для скачивания (attachment).
+              schema:
+                type: string
+                example: attachment; filename="locker_open_20260526.xlsx"
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Отсутствует или некорректен X-Remote-User
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Недостаточно прав (требуется OPERATOR+)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Задача не найдена
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Отчёт ещё не готов (pending/running)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '410':
+          description: Отчёт истёк/провален или файл недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  parameters:
+    ReportId:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор задачи отчёта (UUID).
+      schema:
+        type: string
+        format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440000
+
+  schemas:
+    ReportStatus:
+      type: string
+      description: |
+        Статус задачи генерации отчёта.
+        - `pending` — поставлена в очередь, ещё не взята воркером;
+        - `running` — выполняется;
+        - `ready` — файл готов, доступен для скачивания до `expires_at`;
+        - `failed` — генерация провалена после всех попыток;
+        - `expired` — TTL истёк (или задача удалена), файл удалён.
+      enum:
+        - pending
+        - running
+        - ready
+        - failed
+        - expired
+      example: ready
+
+    CreateReportRequest:
+      type: object
+      description: Тело запроса на постановку задачи генерации отчёта.
+      required:
+        - report_type
+      properties:
+        report_type:
+          type: string
+          description: Тип отчёта (зарегистрированный генератор).
+          enum:
+            - locker_open
+          example: locker_open
+        name:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: |
+            Опциональное имя отчёта (человекочитаемое). Обрезается по краям;
+            пустое после обрезки или длиннее 255 символов → `400`. Можно
+            изменить позже через `PATCH /api/v1/report/{id}`.
+          example: Открытия шкафов за май
+        params:
+          type: object
+          description: |
+            Параметры отчёта, специфичные для `report_type`. Для `locker_open`:
+            `date_from` и `date_to` (ISO-8601 datetime), `date_from < date_to`.
+          properties:
+            date_from:
+              type: string
+              format: date-time
+              description: Начало периода (ISO-8601). Только для locker_open.
+              example: "2026-05-01T00:00:00Z"
+            date_to:
+              type: string
+              format: date-time
+              description: Конец периода (ISO-8601). Только для locker_open.
+              example: "2026-05-31T23:59:59Z"
+
+    UpdateReportRequest:
+      type: object
+      description: Тело запроса на переименование отчёта.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: |
+            Новое имя отчёта (человекочитаемое). Обрезается по краям;
+            обязательно, непустое после обрезки, не длиннее 255 символов.
+          example: Открытия шкафов за май (уточнённый)
+
+    ReportJobCreated:
+      type: object
+      description: Ответ на успешную постановку задачи (202 Accepted).
+      required:
+        - id
+        - status
+        - report_type
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор созданной задачи.
+          example: 550e8400-e29b-41d4-a716-446655440000
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        report_type:
+          type: string
+          example: locker_open
+        name:
+          type: string
+          nullable: true
+          description: Человекочитаемое имя отчёта (если задано при создании).
+          example: Открытия шкафов за май
+        format:
+          type: string
+          nullable: true
+          description: Расширение/формат выходного файла (например, `xlsx`).
+          example: xlsx
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-26T10:30:00Z"
+
+    ReportJob:
+      type: object
+      description: Полное состояние задачи генерации отчёта.
+      required:
+        - id
+        - report_type
+        - params
+        - status
+        - requested_by
+        - attempts
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        report_type:
+          type: string
+          example: locker_open
+        name:
+          type: string
+          nullable: true
+          description: |
+            Человекочитаемое имя отчёта. Задаётся опционально при создании и
+            может быть изменено через `PATCH /api/v1/report/{id}`.
+          example: Открытия шкафов за май
+        params:
+          type: object
+          description: Параметры, с которыми задача была поставлена.
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        requested_by:
+          type: integer
+          description: ID пользователя, поставившего задачу (из X-Remote-User).
+          example: 42
+        format:
+          type: string
+          nullable: true
+          description: Формат выходного файла (`xlsx`/`csv`/`pdf`).
+          example: xlsx
+        file_path:
+          type: string
+          nullable: true
+          description: Внутренний путь к файлу на диске (не отдаётся наружу как ссылка).
+          example: /data/reports/550e8400-e29b-41d4-a716-446655440000.xlsx
+        file_name:
+          type: string
+          nullable: true
+          description: Имя файла для скачивания.
+          example: locker_open_20260526.xlsx
+        file_size:
+          type: integer
+          nullable: true
+          description: Размер файла в байтах.
+          example: 20480
+        row_count:
+          type: integer
+          nullable: true
+          description: Число строк данных в отчёте.
+          example: 137
+        error_message:
+          type: string
+          nullable: true
+          description: Текст ошибки при status=failed.
+          example: null
+        attempts:
+          type: integer
+          description: Число попыток генерации.
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-26T10:30:00Z"
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Момент захвата задачи воркером.
+          example: "2026-05-26T10:30:05Z"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Момент завершения генерации.
+          example: "2026-05-26T10:30:08Z"
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Момент истечения TTL ссылки на файл.
+          example: "2026-05-27T10:30:08Z"
+
+    PaginatedReportJobs:
+      type: object
+      description: Постраничный список задач (shared.dtos.PaginatedResponse).
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportJob'
+        total:
+          type: integer
+          description: Общее число задач, удовлетворяющих фильтру.
+          example: 124
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    ProblemDetails:
+      type: object
+      description: |
+        RFC 7807 Problem Details - стандартный формат ошибок HTTP API.
+        Используется для всех error responses (4xx и 5xx статусы).
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          description: URI reference идентифицирующий тип проблемы.
+          example: "https://api.scuddocs.com/problems/not-found"
+        title:
+          type: string
+          description: Короткое читаемое описание типа проблемы.
+          example: "Not Found"
+        status:
+          type: integer
+          description: HTTP status code
+          minimum: 400
+          maximum: 599
+          example: 404
+        detail:
+          type: string
+          description: Детальное описание конкретной ошибки.
+          example: "report not found"
+        instance:
+          type: string
+          nullable: true
+          description: URI reference конкретного occurrence проблемы (request path).
+          example: "/api/v1/report/550e8400-e29b-41d4-a716-446655440000"
+
+  securitySchemes:
+    RemoteUser:
+      type: apiKey
+      in: header
+      name: X-Remote-User
+      description: |
+        Аутентификация через заголовок X-Remote-User, который проставляет
+        Apache gateway после валидации JWT. В заголовке передаётся ID
+        аутентифицированного пользователя. Все маршруты reports_api требуют
+        роли OPERATOR или выше (проверка в ACM).

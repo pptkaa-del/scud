@@ -1,0 +1,182 @@
+# User Examples
+UserExample:
+  value:
+    id: 123
+    phone: "+79991234567"
+    full_name: "Иванов Иван Иванович"
+    contractor_id: 456
+    contractor_name: "ООО Строй-Сервис"
+    created_at: "2024-01-15T10:30:00Z"
+    created_by: 1
+    updated_at: "2024-01-15T10:30:00Z"
+    updated_by: 1
+    state: "active"
+    role: "worker"
+    require_2fa: true
+    expire_date: "2024-12-31T23:59:59Z"
+
+UserExampleWithoutContractor:
+  value:
+    id: 124
+    phone: "+79995556677"
+    full_name: "Петров Петр Петрович"
+    contractor_id: null
+    contractor_name: null
+    created_at: "2024-01-16T11:00:00Z"
+    created_by: 1
+    updated_at: "2024-01-16T11:00:00Z"
+    updated_by: 1
+    state: "active"
+    role: "operator"
+    require_2fa: true
+    expire_date: null
+
+UserListExample:
+  value:
+    items:
+      - id: 123
+        phone: "+79991234567"
+        full_name: "Иванов Иван Иванович"
+        contractor_id: 456
+        contractor_name: "ООО Строй-Сервис"
+        created_at: "2024-01-15T10:30:00Z"
+        created_by: 1
+        updated_at: "2024-01-15T10:30:00Z"
+        updated_by: 1
+        state: "active"
+        role: "worker"
+        require_2fa: true
+        expire_date: "2024-12-31T23:59:59Z"
+      - id: 124
+        phone: "+79995556677"
+        full_name: "Петров Петр Петрович"
+        contractor_id: null
+        contractor_name: null
+        created_at: "2024-01-16T11:00:00Z"
+        created_by: 1
+        updated_at: "2024-01-16T11:00:00Z"
+        updated_by: 1
+        state: "active"
+        role: "operator"
+        require_2fa: true
+        expire_date: null
+    total: 2
+    limit: 100
+    offset: 0
+
+# Contractor Examples
+ContractorExample:
+  value:
+    id: 456
+    name: "ООО Строй-Сервис"
+    created_at: "2024-01-10T09:00:00Z"
+    created_by: 1
+
+ContractorListExample:
+  value:
+    items:
+      - id: 456
+        name: "ООО Строй-Сервис"
+        created_at: "2024-01-10T09:00:00Z"
+        created_by: 1
+      - id: 457
+        name: "ИП Иванов"
+        created_at: "2024-01-12T14:30:00Z"
+        created_by: 1
+    total: 2
+    limit: 100
+    offset: 0
+
+# User Access Examples
+UserAccessExample:
+  value:
+    id: 1
+    user_id: 123
+    start_at: "2024-01-15T00:00:00Z"
+    end_at: "2024-12-31T23:59:59Z"
+    granted_by: 1
+    granted_by_full_name: "Петров Петр Петрович"
+    request_id: 42
+    full_access: false
+    is_active: true
+    created_at: "2024-01-10T10:30:00Z"
+    lockers: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
+    is_expired: false
+
+UserAccessListExample:
+  value:
+    items:
+      - id: 1
+        user_id: 123
+        start_at: "2024-01-15T00:00:00Z"
+        end_at: "2024-12-31T23:59:59Z"
+        granted_by: 1
+        granted_by_full_name: "Петров Петр Петрович"
+        request_id: 42
+        full_access: false
+        is_active: true
+        created_at: "2024-01-10T10:30:00Z"
+        lockers: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
+        is_expired: false
+      - id: 2
+        user_id: 123
+        start_at: "2023-01-01T00:00:00Z"
+        end_at: null
+        granted_by: 1
+        granted_by_full_name: "Петров Петр Петрович"
+        request_id: null
+        full_access: true
+        is_active: true
+        created_at: "2023-01-01T10:00:00Z"
+        lockers: []
+        is_expired: false
+    total: 2
+    limit: 100
+    offset: 0
+
+# Batch Access Examples
+BatchAccessRequestExample:
+  value:
+    user_ids: [123, 456]
+    include_inactive: false
+
+BatchAccessResponseExample:
+  value:
+    items:
+      "123":
+        - id: 1
+          user_id: 123
+          start_at: "2024-01-15T00:00:00Z"
+          end_at: "2024-12-31T23:59:59Z"
+          granted_by: 1
+          granted_by_full_name: "Петров Петр Петрович"
+          request_id: 42
+          full_access: false
+          is_active: true
+          created_at: "2024-01-10T10:30:00Z"
+          lockers: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001']
+          is_expired: false
+      "456": []
+
+# Emergency Request Log Examples
+EmergencyRequestLogListExample:
+  value:
+    - id: 3
+      request_id: 1
+      action: closed
+      performed_by: 1
+      performed_at: "2024-02-16T11:30:00Z"
+      details: null
+    - id: 2
+      request_id: 1
+      action: viewed
+      performed_by: 1
+      performed_at: "2024-02-16T10:45:00Z"
+      details: null
+    - id: 1
+      request_id: 1
+      action: created
+      performed_by: 42
+      performed_at: "2024-02-16T10:30:00Z"
+      details:
+        locker_id: '550e8400-e29b-41d4-a716-446655440000'

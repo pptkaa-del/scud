@@ -1,0 +1,77 @@
+NotificationIdPath:
+  name: notificationId
+  in: path
+  required: true
+  description: UUID уведомления
+  schema:
+    type: string
+    format: uuid
+
+NotificationTypeQuery:
+  name: type
+  in: query
+  required: false
+  description: Фильтр по типу уведомления
+  schema:
+    type: string
+    enum:
+      - persistent
+
+UserIdQuery:
+  name: user_id
+  in: query
+  required: false
+  description: Фильтр по ID пользователя (для persistent)
+  schema:
+    type: integer
+    format: int64
+
+RoleQuery:
+  name: role
+  in: query
+  required: false
+  description: Фильтр по роли (для persistent)
+  schema:
+    type: string
+
+TagKeyQuery:
+  name: tag_key
+  in: query
+  required: false
+  description: Ключ тега для фильтрации (используется вместе с tag_value)
+  schema:
+    type: string
+
+TagValueQuery:
+  name: tag_value
+  in: query
+  required: false
+  description: Значение тега для фильтрации (используется вместе с tag_key)
+  schema:
+    type: string
+
+ActiveOnlyQuery:
+  name: active_only
+  in: query
+  required: false
+  description: Показывать только активные (не отменённые) уведомления
+  schema:
+    type: boolean
+    default: true
+
+LimitQuery:
+  name: limit
+  in: query
+  required: false
+  schema:
+    type: integer
+    default: 100
+    maximum: 1000
+
+OffsetQuery:
+  name: offset
+  in: query
+  required: false
+  schema:
+    type: integer
+    default: 0

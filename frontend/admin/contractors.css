@@ -1,0 +1,283 @@
+/* Дополнительные стили для таблицы подрядчиков */
+
+/* ===== Поиск ===== */
+.search-container {
+    min-width: 280px;
+    max-width: 380px;
+}
+
+/* ===== Кнопка добавить ===== */
+.btn-with-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    height: 43px;
+    border-radius: var(--border-radius);
+    font-size: 14px;
+}
+
+.btn-primary.btn-with-icon {
+    background: var(--primary-color);
+    border: none;
+    box-shadow: 0 2px 8px rgba(98, 167, 68, 0.2);
+    transition: all 0.3s ease;
+}
+
+.btn-primary.btn-with-icon:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(98, 167, 68, 0.3);
+    background: var(--secondary-color);
+}
+
+.btn-primary.btn-with-icon:active {
+    transform: translateY(0);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--dark-color);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.error-message {
+    color: var(--danger-color);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.required {
+    color: var(--danger-color);
+}
+
+.search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: var(--border-radius);
+    padding: 8px 16px;
+    transition: var(--transition);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.search-box:focus-within {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.search-box i {
+    color: var(--gray-color);
+    margin-right: 10px;
+    font-size: 15px;
+}
+
+.search-box input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    color: var(--dark-color);
+    background: transparent;
+    padding: 4px 0;
+    min-width: 0;
+    font-family: inherit;
+}
+
+.search-box input::placeholder {
+    color: #a0a0a0;
+}
+
+.contractors-table {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow-x: auto;
+}
+
+.contractors-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.contractors-table thead {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.contractors-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--dark-color);
+    white-space: nowrap;
+}
+/*
+.contractors-table th {
+    text-align: left;
+    padding: 16px 20px;
+    background-color: var(--primary-color);
+    background-color: #f8f9fa;
+    color: white;
+    color: var(--dark-color);
+    font-weight: 500;
+}
+*/
+
+.contractors-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #eee;
+    color: var(--dark-color);
+}
+
+.contractors-table tr:last-child td {
+    border-bottom: none;
+}
+
+.contractors-table tr:hover td {
+    background-color: #f8fafc;
+}
+
+.contractor-name {
+    /*font-weight: 600;*/
+    font-size: 14px;
+    color: var(--primary-color);
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--light-color);
+    color: var(--dark-color);
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.btn-icon:hover {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.btn-icon.edit:hover {
+    background-color: var(--warning-color);
+}
+
+.btn-icon.delete:hover {
+    background-color: var(--danger-color);
+}
+
+.btn-icon.team:hover {
+    background-color: var(--success-color);
+}
+
+.empty-message {
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-color);
+    font-size: 16px;
+}
+
+.empty-message i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
+
+.modal-body {
+    padding: 20px 25px;
+}
+
+.modal-footer {
+    padding: 15px 25px;
+    background-color: #f8f9fa;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #eee;
+}
+
+.notification {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background-color: var(--success-color);
+    color: white;
+    padding: 15px 25px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 1001;
+    animation: slideIn 0.3s ease;
+}
+
+.notification.error {
+    background-color: var(--danger-color);
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .page-title-section {
+        flex-direction: column;
+    }
+
+    .header-actions-row {
+        width: 100%;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .search-container {
+        min-width: 100%;
+        max-width: 100%;
+    }
+
+    .btn-with-icon {
+        width: 100%;
+        justify-content: center;
+    }
+}

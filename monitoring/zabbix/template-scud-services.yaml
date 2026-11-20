@@ -1,0 +1,2108 @@
+﻿---
+zabbix_export:
+  version: "7.0"
+  template_groups:
+    - uuid: 02cbee81499c40b39e2bcb6b91427aca
+      name: "Templates/SCUD"
+
+  templates:
+
+    # -------------------------------------------------------------------------
+    # user_api  (port 8000)
+    # -------------------------------------------------------------------------
+    - uuid: 7d1f129a40c746bb8fa36ed9fad5fc09
+      template: "scud-service-user_api"
+      name: "SCUD Service user_api"
+      description: "Scrapes /metrics from user_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: 1035d41e990144ca80986584c02e4fea
+          name: "user_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[user_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://user_api:8000/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: d572263102f346a3ba1e9230854aa8e0
+          name: "user_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 80bc06f75ba3424aa6f7d56fce31f7ec
+          name: "user_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: bfa0c8e9b6c942e59e38ae696762b9a0
+          name: "user_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 6f1fc0d25f66440bb6d89edd1eed8007
+          name: "user_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 369e0aebc1dd4267835823f2f8386e2b
+          name: "user_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 492cefc2ff4749f48d8f8d37c7fb50bd
+          name: "user_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 104d2e39a1eb41af80356693b9df53f8
+          name: "user_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: a6507f7c99b043a28ee718ee4c8e2927
+          name: "user_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: fddb744675624a9d92a9eb2bf2bd6666
+          name: "user_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: f06dfa12c3234ad8b0b607712d106ea0
+          name: "user_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.user_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+      discovery_rules:
+        - uuid: a4c09ee035984b359b21a5fc79a73158
+          name: "user_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[user_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[user_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: 3e016ae9fbe84aff99816b8ce7496b7d
+              name: "user_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[user_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[user_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # locker_api  (port 8001)
+    # -------------------------------------------------------------------------
+    - uuid: fe2a810568bd4a2cb35ca2226ae555fb
+      template: "scud-service-locker_api"
+      name: "SCUD Service locker_api"
+      description: "Scrapes /metrics from locker_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: 33fc7846a41b42adb74d7d75eceda97d
+          name: "locker_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[locker_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://locker_api:8001/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: 914c8f4a3e9d48caac7e2264343143d8
+          name: "locker_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 356971fd42b944e2a177821a07a3b46b
+          name: "locker_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 8e710bcae5c4488b916f6f8d3977a42c
+          name: "locker_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 4e59e96a8dd840d381c507866b279661
+          name: "locker_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 95654033809e418ba02d71728bfdefa8
+          name: "locker_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 4846415d6ee14c3a9b2495dd07446904
+          name: "locker_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 60148b45b205443993576e38514d5db6
+          name: "locker_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 1b266e0ad790427cae1c26d3aba79496
+          name: "locker_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 0434e7e4bd24420fa6a814c438df32a9
+          name: "locker_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: a2e3ced9e0894b80bb66fa871d7e89a0
+          name: "locker_api: command pending total (backlog gauge)"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_command_pending_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_pending_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 02125d2a3ac24a108d2b4544912d99a3
+          name: "locker_api: command lifecycle failed rate"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_command_lifecycle_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: cda8e2e8171a48acbe9aa7d5319e852b
+          name: "locker_api: relay supersession events"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_ws_events_supersession"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_ws_events_total' && @.labels.event=='supersession')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: cf814adbd1004023a0fbc79184f9047d
+          name: "locker_api: MQTT relay messages dropped or handler error"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_mqtt_relay_messages_dropped"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_mqtt_relay_messages_total' && @.labels.outcome=~'dropped.*|handler_error')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: db282264eecb4ab4b910a812ad9b72dc
+          name: "locker_api: relay photo series resets"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_relay_photo_frames_reset"
+          value_type: FLOAT
+          description: "Frames that started a new series for a reused or stale event_id (scud_relay_photo_frames_total{disposition=reset})."
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_relay_photo_frames_total' && @.labels.disposition=='reset')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: f94b17e22555434085a3aea7e0607623
+          name: "locker_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        # --- SLI-B: command latency histogram bucket items (cumulative — no SIMPLE_CHANGE) ---
+        - uuid: 8fb4db79013a4413ac5dc6dba7923dfa
+          name: "locker_api: command queue latency bucket le=5.0"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_cmd_queue_bucket_5s"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_queue_latency_seconds_bucket' && @.labels.le=='5.0')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: e09331cde8e2407a9e4f32c9f0909bac
+          name: "locker_api: command queue latency count"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_cmd_queue_count"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_queue_latency_seconds_count')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: ca8e35bf21664659a26966cc9b08f99a
+          name: "locker_api: command ack latency bucket le=5.0"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_cmd_ack_bucket_5s"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_ack_latency_seconds_bucket' && @.labels.le=='5.0')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 8d3636d517dd427fb4078b9945011ce4
+          name: "locker_api: command ack latency count"
+          type: DEPENDENT
+          key: "scud.metric.locker_api.scud_cmd_ack_count"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_ack_latency_seconds_count')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        # --- SLI-B calculated items: command latency SLO fraction + burn rate ---
+        - uuid: 3816ff2522ff4df2afec1b810247d8c1
+          name: "locker_api: SLI-B command P99 within 5s fraction (5m)"
+          type: CALCULATED
+          key: "scud.sli.locker_api.cmd_p99_fraction_5m"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(avg(//scud.metric.locker_api.scud_cmd_queue_bucket_5s,5m) + avg(//scud.metric.locker_api.scud_cmd_ack_bucket_5s,5m)) / ((avg(//scud.metric.locker_api.scud_cmd_queue_count,5m) + avg(//scud.metric.locker_api.scud_cmd_ack_count,5m)) + ((avg(//scud.metric.locker_api.scud_cmd_queue_count,5m) + avg(//scud.metric.locker_api.scud_cmd_ack_count,5m))=0))"
+        - uuid: 2708afde5ef340a9be1e54a74ec66e02
+          name: "locker_api: SLI-B command P99 within 5s fraction (1h)"
+          type: CALCULATED
+          key: "scud.sli.locker_api.cmd_p99_fraction_1h"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(avg(//scud.metric.locker_api.scud_cmd_queue_bucket_5s,1h) + avg(//scud.metric.locker_api.scud_cmd_ack_bucket_5s,1h)) / ((avg(//scud.metric.locker_api.scud_cmd_queue_count,1h) + avg(//scud.metric.locker_api.scud_cmd_ack_count,1h)) + ((avg(//scud.metric.locker_api.scud_cmd_queue_count,1h) + avg(//scud.metric.locker_api.scud_cmd_ack_count,1h))=0))"
+        - uuid: da8061a2a70c4375b778559fee900657
+          name: "locker_api: SLI-B command latency burn rate (fast, 5m)"
+          type: CALCULATED
+          key: "scud.sli.locker_api.cmd_latency_burn_fast"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(1 - avg(//scud.sli.locker_api.cmd_p99_fraction_5m,5m)) / 0.01"
+        - uuid: 0c4d09ff2ebd441cb2b1d308e949a214
+          name: "locker_api: SLI-B command latency burn rate (slow, 1h)"
+          type: CALCULATED
+          key: "scud.sli.locker_api.cmd_latency_burn_slow"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(1 - avg(//scud.sli.locker_api.cmd_p99_fraction_1h,1h)) / 0.01"
+      discovery_rules:
+        - uuid: 9484812bf09d4ebb8e29cf16d03afd04
+          name: "locker_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[locker_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[locker_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: 0cfb4166821f4c678c55a4faeedd4d03
+              name: "locker_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[locker_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[locker_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # history_api  (port 8002)
+    # -------------------------------------------------------------------------
+    - uuid: 7c4cca8154a241cd8437dbb33c431b18
+      template: "scud-service-history_api"
+      name: "SCUD Service history_api"
+      description: "Scrapes /metrics from history_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: 2277c47b7a1942e4a781d7a138352fee
+          name: "history_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[history_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://history_api:8002/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: ac6a201d59ff452b8d53d1470a095d46
+          name: "history_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: e84cccb51daf4db3a75bdc44e5986d16
+          name: "history_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 283ea7929fa943b4b5808bde5e4c75a8
+          name: "history_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: f7603686578c4df09a31cab2b4465932
+          name: "history_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 2d188807d31e495ea3fe656e77b30748
+          name: "history_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 8f346e1aa972415092ef4fa8ac9c99ce
+          name: "history_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 7ee03c7f96cd45078cd61cc90bd55001
+          name: "history_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: cd883ce23f7445de83847bc6d4a67fa9
+          name: "history_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 2826e2c4445842509df6bda0ff536b54
+          name: "history_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 549613b40e6c43d58e4bf0f4dcae1ca2
+          name: "history_api: partition create failures total"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_partition_create_failures_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_partition_create_failures_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 9007f868f3b7412385cdab5a44fee560
+          name: "history_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.history_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+      discovery_rules:
+        - uuid: a0197c4d3f4041b2b388e96e43f75470
+          name: "history_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[history_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[history_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: 2cf7ca935d3149f4a90524c558d84ecc
+              name: "history_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[history_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[history_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # auth_api  (port 8003)
+    # -------------------------------------------------------------------------
+    - uuid: 6bcb81a0263a4460b3f79f3fd6f96098
+      template: "scud-service-auth_api"
+      name: "SCUD Service auth_api"
+      description: "Scrapes /metrics from auth_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: 2c1b5334f7e1411eb7adb66f7359ca15
+          name: "auth_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[auth_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://auth_api:8003/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: 152d883414d44eddaa2e73f3202a5cc8
+          name: "auth_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: f52137a4555046159f1e0fe9daca0de1
+          name: "auth_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: ea1a2f71502f42ab988d72f23de9d657
+          name: "auth_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: b54bd4ab1b164c7a881935a71b6a660d
+          name: "auth_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 2ddade3af979435cb0ea8a052432b908
+          name: "auth_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 7f035c3364b7453bbef58b260ea5b7fe
+          name: "auth_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 0cadb16105c044868d9e69a978d979e9
+          name: "auth_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: ceae4e46853a42cb8b67625ec4965481
+          name: "auth_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: ec2d328d2b744a66915ddbe5bd9ed947
+          name: "auth_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: cfc213bbb1144b148570ae2a94161ba7
+          name: "auth_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        # --- SLI-A: login availability dependent items ---
+        - uuid: 0f0ed9b00e4d4270b93660eb5a1a4209
+          name: "auth_api: login attempts success (no_2fa) rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_login_success_no2fa"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='success_no_2fa')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 1b55f76908bd47299a6f9d3a5924abff
+          name: "auth_api: login attempts success (2fa) rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_login_success_2fa"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='success_2fa')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 4f4ba0452e4b4f5a975576e5528af2a2
+          name: "auth_api: login attempts total rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_login_attempts_all"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        # --- SLI-C: OTP delivery dependent items ---
+        - uuid: 19b3897ce94c469496f2e342dadbc892
+          name: "auth_api: OTP issue delivered (sent+queued) rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_otp_issue_delivered"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_otp_total' && @.labels.stage=='issue' && @.labels.outcome=~'^(sent|queued)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: dc9f7d9211cb48da8476bfb5d0095256
+          name: "auth_api: OTP issue total rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_otp_issue_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_otp_total' && @.labels.stage=='issue')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 990798041419473c8bff97c3725580e1
+          name: "auth_api: OTP delivery failure rate"
+          type: DEPENDENT
+          key: "scud.metric.auth_api.scud_otp_issue_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_otp_total' && @.labels.stage=='issue' && @.labels.outcome=='delivery_unavailable')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        # --- SLI-A calculated items: login error ratio + burn rate ---
+        - uuid: 30bc026d728749febecc4dc566edf59b
+          name: "auth_api: SLI-A login error ratio (5m)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.login_error_ratio_5m"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(avg(//scud.metric.auth_api.scud_login_attempts_all,5m) - avg(//scud.metric.auth_api.scud_login_success_no2fa,5m) - avg(//scud.metric.auth_api.scud_login_success_2fa,5m)) / (avg(//scud.metric.auth_api.scud_login_attempts_all,5m) + (avg(//scud.metric.auth_api.scud_login_attempts_all,5m)=0))"
+        - uuid: f7fd77d333524a70991d28821d3388fe
+          name: "auth_api: SLI-A login error ratio (1h)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.login_error_ratio_1h"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "(avg(//scud.metric.auth_api.scud_login_attempts_all,1h) - avg(//scud.metric.auth_api.scud_login_success_no2fa,1h) - avg(//scud.metric.auth_api.scud_login_success_2fa,1h)) / (avg(//scud.metric.auth_api.scud_login_attempts_all,1h) + (avg(//scud.metric.auth_api.scud_login_attempts_all,1h)=0))"
+        - uuid: 397ee40904ef4c13b48ff8c28866ef1f
+          name: "auth_api: SLI-A login burn rate (fast, 5m)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.login_burn_fast"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.sli.auth_api.login_error_ratio_5m,5m) / 0.005"
+        - uuid: 99b8276443d3417e92456805b96b3a66
+          name: "auth_api: SLI-A login burn rate (slow, 1h)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.login_burn_slow"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.sli.auth_api.login_error_ratio_1h,1h) / 0.005"
+        # --- SLI-C calculated items: OTP delivery error ratio + burn rate ---
+        - uuid: 6f5d25d6425a4f48821be77e3fb2dc80
+          name: "auth_api: SLI-C OTP delivery error ratio (5m)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.otp_error_ratio_5m"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.metric.auth_api.scud_otp_issue_failed,5m) / (avg(//scud.metric.auth_api.scud_otp_issue_total,5m) + (avg(//scud.metric.auth_api.scud_otp_issue_total,5m)=0))"
+        - uuid: c05cbd40a9724f8399fbbf34b6388952
+          name: "auth_api: SLI-C OTP delivery error ratio (1h)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.otp_error_ratio_1h"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.metric.auth_api.scud_otp_issue_failed,1h) / (avg(//scud.metric.auth_api.scud_otp_issue_total,1h) + (avg(//scud.metric.auth_api.scud_otp_issue_total,1h)=0))"
+        - uuid: e4637e17048d41d282d9ce3dfbb27fd1
+          name: "auth_api: SLI-C OTP delivery burn rate (fast, 5m)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.otp_burn_fast"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.sli.auth_api.otp_error_ratio_5m,5m) / 0.01"
+        - uuid: ba7ba11ffe2e40d2b2d0ed9afca498d9
+          name: "auth_api: SLI-C OTP delivery burn rate (slow, 1h)"
+          type: CALCULATED
+          key: "scud.sli.auth_api.otp_burn_slow"
+          value_type: FLOAT
+          delay: 60s
+          history: 7d
+          trends: 90d
+          params: "avg(//scud.sli.auth_api.otp_error_ratio_1h,1h) / 0.01"
+      discovery_rules:
+        - uuid: f907f9211c2449ba80a79306d7573b60
+          name: "auth_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[auth_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[auth_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: e2f71e9fa05c49a3929e69bc2f9f6274
+              name: "auth_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[auth_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[auth_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # acm  (port 8004)
+    # -------------------------------------------------------------------------
+    - uuid: 8b5001eb44174c6f8633a149d328ab6a
+      template: "scud-service-acm"
+      name: "SCUD Service acm"
+      description: "Scrapes /metrics from acm and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: d177696b92d3479887e8fb90bbcfcadf
+          name: "acm: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[acm]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://acm:8004/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: e9a48ec3e9694c3d9fc31e62cc251731
+          name: "acm: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: b0f4f2e4e3ed4efda4e312f6df55d0b4
+          name: "acm: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: de2d404bb9744e2ca6888172a7210429
+          name: "acm: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: f2cb8e3ef8464b00869a75d333f8e708
+          name: "acm: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 6ffca5eea03f4cb4b4b3bff29934a7ec
+          name: "acm: security events total"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 03e53d5935de4fc4adb34f2fe2788b4e
+          name: "acm: login attempts bad_credential rate (no-op for acm)"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 0f3feae77ece4b5d8896bf23ad0bc080
+          name: "acm: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 4989fb7c12254e3eb9a9af4c5e20fd41
+          name: "acm: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: f6f02c5765d14027b80056b3f4690afd
+          name: "acm: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 2a1b12a0c46641b0b3f1ab545bcae941
+          name: "acm: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.acm.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+      discovery_rules:
+        - uuid: fbef2f721dc34e2395b2d750d8a2d5e5
+          name: "acm: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[acm]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[acm]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: bdfcb7572c634c8cb12a5afd237b448d
+              name: "acm: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[acm,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[acm]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # notification_api  (port 8005)
+    # -------------------------------------------------------------------------
+    - uuid: f7f02140a0494a7bacd7e7b82d2aee82
+      template: "scud-service-notification_api"
+      name: "SCUD Service notification_api"
+      description: "Scrapes /metrics from notification_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: 3cd5bb58c6e74de8b2b8c60cb7627984
+          name: "notification_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[notification_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://notification_api:8005/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: f80ef62383cf4f969b3e5e1fa2b0db09
+          name: "notification_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 7760da325315448fb6b4b81d30be5c81
+          name: "notification_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: d9e6e6d1974a45bdaf18ecdd9a3ffd2f
+          name: "notification_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: d56d44f1447b4af39d0d1cac6b4bc9c2
+          name: "notification_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 5623b69af4164e0babb7ccddf70636ce
+          name: "notification_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 581e6953df384eadbc119231bed2190d
+          name: "notification_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: c35e4d27c2784412b585b0000b635115
+          name: "notification_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 66f686333dd94eb6a3a05d5399a10c89
+          name: "notification_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 7ea17b5565a845cd984fe6e0ddeb09b9
+          name: "notification_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 0ecd08599b7f4790848e22676877ac79
+          name: "notification_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.notification_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+      discovery_rules:
+        - uuid: cc6eb4eceb1640e5af2028bb0ddc9e2d
+          name: "notification_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[notification_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[notification_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: 17b32266d5ab44a9b251d36c0faf8ad4
+              name: "notification_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[notification_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[notification_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+    # -------------------------------------------------------------------------
+    # reports_api  (port 8006)
+    # -------------------------------------------------------------------------
+    - uuid: 691355dc11c6416ba335b552b04b3585
+      template: "scud-service-reports_api"
+      name: "SCUD Service reports_api"
+      description: "Scrapes /metrics from reports_api and exposes key SCUD series as Zabbix items."
+      groups:
+        - name: "Templates/SCUD"
+      items:
+        - uuid: dd91ea97826a4964afc3b0adf73f1db5
+          name: "reports_api: raw /metrics"
+          type: HTTP_AGENT
+          key: "scud.metrics.raw[reports_api]"
+          delay: 30s
+          history: "0"
+          trends: "0"
+          value_type: TEXT
+          url: "http://reports_api:8006/metrics"
+          status_codes: "200"
+          timeout: 10s
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ""
+        - uuid: 106a035ab51b4931a9e370005858bbe0
+          name: "reports_api: HTTP requests total"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_http_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 03ff9df0444a461291df657847af0ad3
+          name: "reports_api: HTTP request duration sum"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_http_request_duration_seconds"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_request_duration_seconds_sum')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 7f07360d94a5460ca39264deb591009b
+          name: "reports_api: DB pool waiters"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_db_pool_connections_waiters"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_pool_connections_waiters')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+        - uuid: 3b7988c6553f48f2906c5c97b4a37c6a
+          name: "reports_api: command lifecycle ack_timeout_failed rate"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_command_lifecycle_ack_timeout_failed"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_command_lifecycle_total' && @.labels.transition=='ack_timeout_failed')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 7a79a13dea04496b8a67c8d709fc454c
+          name: "reports_api: security events total"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_security_events_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_security_events_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 982399e19c424c759cd02123ad9933a7
+          name: "reports_api: login attempts bad_credential rate"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_login_attempts_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_login_attempts_total' && @.labels.outcome=='bad_credential')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 49dfcd9bd2b74c64999aa0d42c81436b
+          name: "reports_api: HTTP 5xx requests"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_http_requests_5xx"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_http_requests_total' && @.labels.status=~'5..')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 4e2cfe167c674973933e61f8252a48b7
+          name: "reports_api: interservice requests total"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_interservice_requests_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: 775c82787d494ff8be41f1fb7fda8b94
+          name: "reports_api: DB errors total"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_db_errors_total"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_db_errors_total')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+        - uuid: d0277a5fe4e742a88c7e485565b06c2e
+          name: "reports_api: interservice errors (error or exhausted)"
+          type: DEPENDENT
+          key: "scud.metric.reports_api.scud_interservice_errors"
+          value_type: FLOAT
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.name=='scud_interservice_requests_total' && @.labels.outcome=~'^(error|exhausted)$')].value.sum()"
+              error_handler: CUSTOM_VALUE
+              error_handler_params: "0"
+            - type: SIMPLE_CHANGE
+              parameters:
+                - ""
+      discovery_rules:
+        - uuid: 151e4ed6a6314947adb2b38a14a881d5
+          name: "reports_api: Prometheus series discovery"
+          type: DEPENDENT
+          key: "scud.metrics.lld[reports_api]"
+          delay: "0"
+          master_item:
+            key: "scud.metrics.raw[reports_api]"
+          lld_macro_paths:
+            - lld_macro: "{#METRIC}"
+              path: "$.name"
+            - lld_macro: "{#HELP}"
+              path: "$.help"
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - "$[?(@.type=='counter' || @.type=='gauge')]"
+          item_prototypes:
+            - uuid: dfa8dcc5cdac48728005d767d6217d8b
+              name: "reports_api: {#METRIC}"
+              type: DEPENDENT
+              key: "scud.series[reports_api,{#METRIC}]"
+              value_type: FLOAT
+              master_item:
+                key: "scud.metrics.raw[reports_api]"
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$[?(@.name=='{#METRIC}')].value.first()"
+
+  # ---------------------------------------------------------------------------
+  # Top-level triggers (Zabbix 7.0 YAML format: triggers live under
+  # zabbix_export, not under individual templates)
+  # ---------------------------------------------------------------------------
+  triggers:
+    # user_api
+    - uuid: d91d266ce1a0451681fa90837167435d
+      name: "user_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-user_api/scud.metrics.raw[user_api],3m)=1"
+    - uuid: cd1dc850d9d0405fb9fd4eefd611d584
+      name: "user_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_http_requests_5xx,5m)>5"
+    - uuid: 2d8eae287de64c64a4e486d98b1688d3
+      name: "user_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: 86f42e503aab4f88acd1a762e7e7a54a
+      name: "user_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: dc7a8f525df84c54bc9c98c7061ab0aa
+      name: "user_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_security_events_total,5m)>10"
+    - uuid: ab76d910805c432e930c83018aa5ded7
+      name: "user_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_login_attempts_total,5m)>20"
+    # locker_api
+    - uuid: afd6772118e54dd197a853b4c2a932dd
+      name: "locker_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-locker_api/scud.metrics.raw[locker_api],3m)=1"
+    - uuid: 81635cd1b0104dcfb8905dee502ef633
+      name: "locker_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_http_requests_5xx,5m)>5"
+    - uuid: 3fe6d59db1e14db98c736aba7c511829
+      name: "locker_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: b020583112d643df8e901a2f6207b48f
+      name: "locker_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: a1f287e752e34cd1b4cb891704fd86fa
+      name: "locker_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_security_events_total,5m)>10"
+    - uuid: 147aa09d300142a5a78b546a3fb114ed
+      name: "locker_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_login_attempts_total,5m)>20"
+    # history_api
+    - uuid: cce9c1c6aa3744dc9824001a43e92483
+      name: "history_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-history_api/scud.metrics.raw[history_api],3m)=1"
+    - uuid: 2c3bcbbd31ca425cb8d605fe41e09ec9
+      name: "history_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_http_requests_5xx,5m)>5"
+    - uuid: 048e89223ade4c5bab19d9b5a18ea163
+      name: "history_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: 2888601e97004e6fb171acd8d37b43a3
+      name: "history_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: 290c21ca709747839464f2e5b1ba19cf
+      name: "history_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_security_events_total,5m)>10"
+    - uuid: 958e011af9204c8e97688c2abd0a9144
+      name: "history_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_login_attempts_total,5m)>20"
+    # auth_api
+    - uuid: 662f598c6cad427d87e296a7fc73d17b
+      name: "auth_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-auth_api/scud.metrics.raw[auth_api],3m)=1"
+    - uuid: a5606511898d472b9b74bdce2ff59608
+      name: "auth_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_http_requests_5xx,5m)>5"
+    - uuid: 88cc1249c38149b1bae74ab40c6b9f89
+      name: "auth_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: 546d8997ac1645b29c38662dac4498bb
+      name: "auth_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: b54836d5e5894e5d83d7857e1423cfd5
+      name: "auth_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_security_events_total,5m)>10"
+    - uuid: bfbb105685b8447da86cab06391a2550
+      name: "auth_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_login_attempts_total,5m)>20"
+    # acm
+    - uuid: f90a9c42ad0d4d0b96521cbbc2ba671d
+      name: "acm down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-acm/scud.metrics.raw[acm],3m)=1"
+    - uuid: 86e6d62e736044a998bfd0d535f8c778
+      name: "acm HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_http_requests_5xx,5m)>5"
+    - uuid: d16e3dcf9121432693bf9709f81084e4
+      name: "acm DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: 2bcae2628df4400b9d53e16df89be4b7
+      name: "acm command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: 7331c2f1b93342258905be9a238cee40
+      name: "acm security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_security_events_total,5m)>10"
+    - uuid: 524fe4938bcc447e89ffaa6afe1b9cc2
+      name: "acm login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_login_attempts_total,5m)>20"
+    # notification_api
+    - uuid: 7564973a773f465d892e3b4a4e75d473
+      name: "notification_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-notification_api/scud.metrics.raw[notification_api],3m)=1"
+    - uuid: 89f2b87db54d48ea8f49de1c3a88efaf
+      name: "notification_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_http_requests_5xx,5m)>5"
+    - uuid: a40315e9e5674c98bcf2fb454e8b7fc1
+      name: "notification_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: e60f34e2c0e048a999823aa58953c1e3
+      name: "notification_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: 7fafc32354c342c8bcd7b2edb3cb0193
+      name: "notification_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_security_events_total,5m)>10"
+    - uuid: 31c12bb972af403a93fce9ce4f139d6a
+      name: "notification_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_login_attempts_total,5m)>20"
+    # reports_api
+    - uuid: c91df368ce114132951a6e67e6bc4ed9
+      name: "reports_api down (no metrics 3m)"
+      priority: HIGH
+      expression: "nodata(/scud-service-reports_api/scud.metrics.raw[reports_api],3m)=1"
+    - uuid: 10c3aa9c45424d2eac99a6acda3bd552
+      name: "reports_api HTTP 5xx rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_http_requests_5xx,5m)>5"
+    - uuid: f6e5db3e1e844bad8142a6e85afb53da
+      name: "reports_api DB pool waiters saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_db_pool_connections_waiters,5m)>0"
+    - uuid: a509750873264134bd8f6b780d97d6c6
+      name: "reports_api command ack_timeout_failed rate"
+      priority: HIGH
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_command_lifecycle_ack_timeout_failed,5m)>0"
+    - uuid: 24cda81a88f3476e84959490aadcc13b
+      name: "reports_api security events spike"
+      priority: HIGH
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_security_events_total,5m)>10"
+    - uuid: fd98085e995a4e97ac849e79f367e248
+      name: "reports_api login bad_credential spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_login_attempts_total,5m)>20"
+    # locker_api domain metric triggers
+    - uuid: 38067a12953845f7b1d6aa45899e7721
+      name: "locker_api command failure rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_command_lifecycle_failed,5m)>5"
+    - uuid: ea5cfd841547462ca8ce7c203add7fa4
+      name: "locker_api relay drop spike"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_mqtt_relay_messages_dropped,5m)>20"
+    - uuid: b9b4c7edea7b42d184d154229cb6db6a
+      name: "locker_api command backlog saturation"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_command_pending_total,10m)>50"
+    # per-service interservice error rate triggers
+    - uuid: 34917cc91b724399aef6083049c84d00
+      name: "user_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_interservice_errors,5m)>5"
+    - uuid: 1abc175be243498d8dcd217068ebd969
+      name: "locker_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_interservice_errors,5m)>5"
+    - uuid: 1c0a0c327bac46b5baa921fc275f8ad9
+      name: "history_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_interservice_errors,5m)>5"
+    - uuid: b7c9033a4f88415b85ee948e01855d70
+      name: "auth_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_interservice_errors,5m)>5"
+    - uuid: 3312e071f5fa4044a6f438dcc2a7306c
+      name: "acm interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_interservice_errors,5m)>5"
+    - uuid: b7e69e06a9e4463d874221f482996e29
+      name: "notification_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_interservice_errors,5m)>5"
+    - uuid: f381d1eb745b4fa981bb5d25f7bb8c18
+      name: "reports_api interservice error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_interservice_errors,5m)>5"
+    # per-service DB error rate triggers
+    - uuid: 6f94bbdb6bb945d1996d862f5ae74b98
+      name: "user_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-user_api/scud.metric.user_api.scud_db_errors_total,5m)>5"
+    - uuid: 2279b777eea44fc698e0e9d93cfa1ebc
+      name: "locker_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-locker_api/scud.metric.locker_api.scud_db_errors_total,5m)>5"
+    - uuid: 8df2a67bf88f40d389a33ad88d9a2b2e
+      name: "history_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_db_errors_total,5m)>5"
+    - uuid: a4f1f49aeaf2437993e5743c5a60b456
+      name: "history_api partition create failure"
+      priority: AVERAGE
+      expression: "min(/scud-service-history_api/scud.metric.history_api.scud_partition_create_failures_total,1h)>0"
+    - uuid: 35805849a500404886020cb72be822eb
+      name: "auth_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-auth_api/scud.metric.auth_api.scud_db_errors_total,5m)>5"
+    - uuid: 2b2154953fc647e1bb02d951f1385328
+      name: "acm DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-acm/scud.metric.acm.scud_db_errors_total,5m)>5"
+    - uuid: 73cdaeea99504437914de660944c3f4c
+      name: "notification_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-notification_api/scud.metric.notification_api.scud_db_errors_total,5m)>5"
+    - uuid: c853144c1223415bacc54f0e0b80269b
+      name: "reports_api DB error rate high"
+      priority: AVERAGE
+      expression: "min(/scud-service-reports_api/scud.metric.reports_api.scud_db_errors_total,5m)>5"
+    # --- SLO burn-rate triggers (SLI-A login, SLI-B command latency, SLI-C OTP delivery) ---
+    - uuid: 6cf8728cc5b24726966fb64ce8ebe1ce
+      name: "auth_api SLI-A login availability fast-burn (>14.4x)"
+      priority: HIGH
+      expression: "last(/scud-service-auth_api/scud.sli.auth_api.login_burn_fast)>14.4 and last(/scud-service-auth_api/scud.metric.auth_api.scud_login_attempts_all)>5"
+    - uuid: 799a8db93acd40d49cbb5cfa8b113ab6
+      name: "auth_api SLI-A login availability slow-burn (>1x, 1h)"
+      priority: AVERAGE
+      expression: "last(/scud-service-auth_api/scud.sli.auth_api.login_burn_slow)>1 and avg(/scud-service-auth_api/scud.metric.auth_api.scud_login_attempts_all,1h)>2"
+    - uuid: cbc7190471824233a3ce7d889722e8f4
+      name: "locker_api SLI-B command latency fast-burn (>14.4x)"
+      priority: HIGH
+      expression: "last(/scud-service-locker_api/scud.sli.locker_api.cmd_latency_burn_fast)>14.4 and (avg(/scud-service-locker_api/scud.metric.locker_api.scud_cmd_queue_count,5m) + avg(/scud-service-locker_api/scud.metric.locker_api.scud_cmd_ack_count,5m))>1"
+    - uuid: 651253db9e6a40158b62340a18cf5d52
+      name: "locker_api SLI-B command latency slow-burn (>1x, 1h)"
+      priority: AVERAGE
+      expression: "last(/scud-service-locker_api/scud.sli.locker_api.cmd_latency_burn_slow)>1 and (avg(/scud-service-locker_api/scud.metric.locker_api.scud_cmd_queue_count,1h) + avg(/scud-service-locker_api/scud.metric.locker_api.scud_cmd_ack_count,1h))>1"
+    - uuid: af088fbe0d04425f916dd5d9c95d4717
+      name: "auth_api SLI-C OTP delivery fast-burn (>14.4x)"
+      priority: HIGH
+      expression: "last(/scud-service-auth_api/scud.sli.auth_api.otp_burn_fast)>14.4 and avg(/scud-service-auth_api/scud.metric.auth_api.scud_otp_issue_total,5m)>1"
+    - uuid: 1b9450110f374d9cabf46dd476d7af27
+      name: "auth_api SLI-C OTP delivery slow-burn (>1x, 1h)"
+      priority: AVERAGE
+      expression: "last(/scud-service-auth_api/scud.sli.auth_api.otp_burn_slow)>1 and avg(/scud-service-auth_api/scud.metric.auth_api.scud_otp_issue_total,1h)>1"

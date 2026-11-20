@@ -1,0 +1,266 @@
+openapi: 3.2.0
+info:
+  title: Auth API
+  description: API аутентификации и управления токенами в системе СКУД
+  version: 1.0.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8003
+    description: Development server
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+  /live:
+    get:
+      tags: [health]
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags: [health]
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                required: [status, db]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+  /api/v1/auth/login:
+    $ref: './paths/auth.yaml#/login'
+  /api/v1/auth/verify:
+    $ref: './paths/auth.yaml#/verify'
+  /api/v1/auth/access:
+    $ref: './paths/auth.yaml#/access'
+  /api/v1/auth/logout:
+    $ref: './paths/auth.yaml#/logout'
+  /api/v1/auth/users/{user_id}/tokens:
+    $ref: './paths/auth.yaml#/revokeUserTokens'
+  /auth/validate:
+    $ref: './paths/auth.yaml#/validate'
+
+  /internal/api/v1/step-up/issue:
+    post:
+      summary: Внутренний — выдать step-up OTP-челлендж
+      description: |
+        HMAC-подписанный эндпоинт (`X-Internal-Timestamp` +
+        `X-Internal-Signature` над
+        `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`,
+        ключ — `INTERNAL_STEP_UP_HMAC_KEY`, окно повтора 30 с). Генерирует
+        6-значный OTP, сохраняет
+        SHA-256-хэш в `step_up_challenges`, возвращает `challenge_id` и
+        просит notification_api доставить открытый код: SMS на `phone`
+        пользователя (основной канал), при недоступности SMS — в Max-бот
+        (резервный). Если ни один канал не доставил код сразу, код ждёт
+        привязки Max в outbox, а ответ остаётся `201` со статусом
+        `queued_until_binding`.
+        Закрыт снаружи через Apache (`<Location /internal> Require all denied`).
+      tags: [internal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, scope_kind]
+              properties:
+                user_id: { type: integer, minimum: 1 }
+                scope_kind: { type: string, maxLength: 64 }
+                scope_payload: { type: object }
+                ttl_seconds: { type: integer, minimum: 1, maximum: 3600, default: 300 }
+      responses:
+        '201':
+          description: |
+            Челлендж создан. `delivery_status`: `sent` — OTP передан в канал
+            доставки (SMS либо Max); `queued_until_binding` — ни один канал не
+            доставил код, OTP лежит в outbox и уйдёт после `bot_started`.
+            `max_binding_required` —
+            защитный случай: у пользователя нет ни телефона, ни привязки Max,
+            доставить некуда; `challenge_id` равен null, вызывающий сервис
+            разворачивает это в 401 для клиента.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge_id: { type: string, nullable: true, format: uuid }
+                  expires_at: { type: string, nullable: true, format: date-time }
+                  delivery_status:
+                    type: string
+                    enum: [sent, queued_until_binding, max_binding_required]
+        '400': { description: невалидный DTO }
+        '401': { description: HMAC-подпись невалидна или просрочена }
+        '503':
+          description: |
+            user_api или notification_api недоступны. `detail` —
+            русскоязычное сообщение для пользователя.
+
+  /internal/api/v1/step-up/verify:
+    post:
+      summary: Внутренний — проверить step-up OTP-код
+      description: |
+        Та же HMAC-схема, что и у `/step-up/issue`. `reserve_attempt`
+        (атомарный бюджет попыток) и `consume` (атомарный single-use) —
+        единственный механизм корректности: каждый это один CAS-UPDATE с
+        инвариантом в `WHERE`, отдающий успех не более чем одному из
+        параллельных вызовов.
+        Дополнительно locker_api в `/commands/confirm` повторно сверяет
+        `scope_payload.locker_id` с `locker_id` из URL, поэтому
+        повторно использованный verify не может «утечь» челлендж на другой шкаф.
+      tags: [internal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, user_id, code]
+              properties:
+                challenge_id: { type: string, format: uuid }
+                user_id: { type: integer, minimum: 1 }
+                code: { type: string, maxLength: 16 }
+      responses:
+        '200':
+          description: Код принят. В ответе возвращается исходный `scope_payload`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scope_kind: { type: string }
+                  scope_payload: { type: object }
+        '401':
+          description: |
+            Неверный код / истёк / уже использован / заблокирован после
+            исчерпания попыток / не найден.
+        '403':
+          description: Челлендж принадлежит другому пользователю.
+
+  /internal/api/v1/sessions/revoke:
+    post:
+      summary: Внутренний — отозвать все живые сессии пользователя
+      description: |
+        Отзывает все активные access-токены пользователя. Вызывается user_api
+        после успешной смены учётных данных (пароль / переключение 2FA), чтобы
+        скомпрометированная живая сессия не пережила сброс пароля (SEC-14).
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`
+          (`<Location /internal> Require all denied`).
+        - HMAC-подпись: `X-Internal-Timestamp` (Unix-секунды) +
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`),
+          ключ — `INTERNAL_SESSION_REVOKE_HMAC_KEY` (общий с user_api), окно
+          повтора 30 с. Запросы с невалидной/просроченной подписью — 401.
+          Если ключ не задан (dev/CI без `.env`) — проверка пропускается
+          (fail-open); в production ключ обязателен.
+      tags: [internal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: integer
+                  minimum: 1
+                  description: ID пользователя, чьи токены нужно отозвать.
+      responses:
+        '200':
+          description: Сессии отозваны.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked:
+                    type: integer
+                    minimum: 0
+                    description: Число отозванных access-токенов.
+        '400':
+          description: |
+            Тело невалидно — не JSON-объект или `user_id` не целое число.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: HMAC-подпись отсутствует, невалидна или просрочена.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  schemas:
+    LoginRequest:
+      $ref: './schemas/requests.yaml#/LoginRequest'
+    VerifyRequest:
+      $ref: './schemas/requests.yaml#/VerifyRequest'
+    LoginSuccessResponse:
+      $ref: './schemas/token.yaml#/LoginSuccessResponse'
+    AuthMessageResponse:
+      $ref: './schemas/token.yaml#/AuthMessageResponse'
+    OtpSentResponse:
+      $ref: './schemas/token.yaml#/OtpSentResponse'
+    ProblemDetails:
+      $ref: './schemas/error.yaml#/ProblemDetails'
+
+  responses:
+    $ref: './components/responses.yaml'
+
+  examples:
+    $ref: './components/examples.yaml'
+
+  securitySchemes:
+    $ref: './components/securitySchemes.yaml'

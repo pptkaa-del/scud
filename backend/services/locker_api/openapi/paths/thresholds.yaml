@@ -1,0 +1,167 @@
+thresholds:
+  get:
+    summary: Получить список пороговых значений датчика
+    description: |
+      Возвращает список пороговых значений для датчика с пагинацией.
+      Ответ имеет стандартный формат `{items, total, limit, offset}`.
+    operationId: getThresholds
+    tags:
+      - Thresholds
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список пороговых значений с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/threshold.yaml#/ThresholdListResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать новое пороговое значение
+    description: |
+      Создает новое пороговое значение для датчика.
+      Можно указать min_value, max_value или fixed_value (или комбинацию).
+      Требуется аутентификация через X-Remote-User header.
+
+      Для датчика с value_type=boolean значение fixed_value канонизируется
+      к "true"/"false" (принимаются "true"/"false" в любом регистре, "1"/"0").
+      Значение, которое нельзя трактовать как булево (например "banana"),
+      отклоняется с 400.
+
+      Для перечислимого датчика (у которого GET датчика отдаёт непустой
+      `display`: `power`, `net_type`, `error`, `door`) min_value/max_value
+      неприменимы → 400. fixed_value числового перечислимого датчика
+      (`power`, `net_type`) должен быть целым из словаря типа (`states` в
+      GET /sensor-types) и хранится как строка целого ("1.0" → "1");
+      иначе → 400.
+    operationId: createThreshold
+    tags:
+      - Thresholds
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/threshold.yaml#/ThresholdCreate'
+          examples:
+            range:
+              summary: Диапазон значений
+              value:
+                min_value: 18.0
+                max_value: 25.0
+                description: "Допустимый диапазон температуры"
+            fixed:
+              summary: Фиксированное значение
+              value:
+                fixed_value: 50.0
+                description: "Критический уровень влажности"
+    responses:
+      '201':
+        description: Пороговое значение успешно создано
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/threshold.yaml#/Threshold'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+thresholds_by_id:
+  get:
+    summary: Получить пороговое значение по ID
+    description: Возвращает информацию о конкретном пороговом значении
+    operationId: getThresholdById
+    tags:
+      - Thresholds
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+      - $ref: '../components/parameters.yaml#/ThresholdIdPath'
+    responses:
+      '200':
+        description: Данные порогового значения
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/threshold.yaml#/Threshold'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  put:
+    summary: Обновить пороговое значение
+    description: |
+      Обновляет данные порогового значения. Проверки те же, что при создании:
+      канонизация fixed_value boolean-датчика и ограничения перечислимых
+      датчиков (min_value/max_value → 400, fixed_value вне словаря → 400).
+    operationId: updateThreshold
+    tags:
+      - Thresholds
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+      - $ref: '../components/parameters.yaml#/ThresholdIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/threshold.yaml#/ThresholdUpdate'
+    responses:
+      '200':
+        description: Пороговое значение успешно обновлено
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/threshold.yaml#/Threshold'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  delete:
+    summary: Удалить пороговое значение
+    description: Удаляет пороговое значение из системы
+    operationId: deleteThreshold
+    tags:
+      - Thresholds
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/SensorIdPath'
+      - $ref: '../components/parameters.yaml#/ThresholdIdPath'
+    responses:
+      '204':
+        $ref: '../components/responses.yaml#/NoContent'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'

@@ -1,0 +1,99 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Шкафы управления</h2>
+        </div>
+        <div class="header-actions-row">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="cabinetsSearch" placeholder="Поиск по номеру, адресу...">
+                    <button class="search-clear" id="clearCabinetsSearch" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <!-- Фильтры -->
+    <div class="filter-bar" id="filterBar">
+        <div class="filter-chips" id="filterChips"></div>
+        <div class="filter-controls">
+            <div class="filter-select-wrapper">
+                <select id="filterConnectivity" class="filter-select">
+                    <option value="">Связь: Все</option>
+                    <option value="online">Онлайн</option>
+                    <option value="offline">Офлайн</option>
+                </select>
+                <i class="fas fa-chevron-down filter-select-arrow"></i>
+            </div>
+            <div class="filter-select-wrapper">
+                <select id="filterDoor" class="filter-select">
+                    <option value="">Дверь: Все</option>
+                    <option value="closed">Закрыта</option>
+                    <option value="open">Открыта</option>
+                </select>
+                <i class="fas fa-chevron-down filter-select-arrow"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Карта -->
+    <div class="cabinet-map-container">
+        <div class="map-header">
+            <div class="map-title">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Карта размещения оборудования</span>
+            </div>
+        </div>
+        <div class="folium-map" id="cabinets-map"></div>
+    </div>
+
+    <!-- Сетка шкафов -->
+    <div class="cabinets-grid" id="cabinetsGrid"></div>
+
+    <div id="paginationContainer" class="pagination-container"></div>
+
+    <!-- Пустое состояние -->
+    <div class="empty-state" id="emptyState">
+        <i class="fas fa-server"></i>
+        <h3>Шкафы не найдены</h3>
+        <p>Измените параметры поиска</p>
+    </div>
+</div>
+
+<!-- Модальное окно быстрого просмотра -->
+<div class="new-modal-overlay" id="quickViewModal">
+    <div class="new-modal">
+        <div class="new-modal-header">
+            <h3><i class="fas fa-server"></i> Шкаф</h3>
+            <button class="new-modal-close" id="closeQuickView">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="new-modal-body">
+            <div class="quick-view-content">
+                <div class="info-item">
+                    <div class="info-label">Инвентарный номер</div>
+                    <div class="info-value" id="quickViewInventory">—</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Адрес</div>
+                    <div class="info-value" id="quickViewAddress">—</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Статус связи</div>
+                    <div class="info-value" id="quickViewStatus">—</div>
+                </div>
+                <div class="quick-view-actions">
+                    <button class="btn-primary" id="goToDetailBtn">
+                        <i class="fas fa-arrow-right"></i> Перейти к шкафу
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

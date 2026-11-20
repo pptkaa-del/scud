@@ -1,0 +1,140 @@
+media_list:
+  get:
+    summary: Список медиа-файлов
+    description: |
+      Возвращает постраничный список медиа-файлов с фильтрацией.
+      Байты не включаются — только метаданные.
+    operationId: mediaList
+    tags:
+      - Media
+    security:
+      - RemoteUser: []
+    parameters:
+      - name: locker_id
+        in: query
+        required: false
+        description: UUID шкафа
+        schema: { type: string, format: uuid }
+      - name: kind
+        in: query
+        required: false
+        description: Тип медиа (photo)
+        schema:
+          type: string
+          enum: [photo]
+      - name: security_event_id
+        in: query
+        required: false
+        description: ID события безопасности
+        schema: { type: integer, format: int64 }
+      - name: from
+        in: query
+        required: false
+        description: Начало диапазона captured_at (ISO 8601)
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        required: false
+        description: Конец диапазона captured_at (ISO 8601)
+        schema: { type: string, format: date-time }
+      - name: limit
+        in: query
+        required: false
+        schema: { type: integer, default: 50, minimum: 1, maximum: 500 }
+      - name: offset
+        in: query
+        required: false
+        schema: { type: integer, default: 0, minimum: 0 }
+    responses:
+      '200':
+        description: Список медиа-файлов
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/media.yaml#/MediaListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+
+media_by_id:
+  get:
+    summary: Получить содержимое медиа-файла
+    description: |
+      Возвращает байты медиа-файла (фото).
+      Content-Type соответствует mime_type записи в БД.
+      Ответ устанавливает заголовок `Content-Disposition: inline` с `filename`,
+      имеющим корректное расширение, выведенное из `mime_type` записи
+      (`image/jpeg`→`jpg`, `image/png`→`png`), например `media-42.jpg`.
+    operationId: mediaById
+    tags:
+      - Media
+    security:
+      - RemoteUser: []
+    parameters:
+      - name: mediaId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    responses:
+      '200':
+        description: Содержимое медиа-файла
+        headers:
+          Content-Disposition:
+            description: |
+              Расположение содержимого. Всегда `inline`; `filename` содержит
+              корректное расширение, выведенное из `mime_type` записи.
+            schema: { type: string }
+            example: inline; filename="media-42.jpg"
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+media_by_event:
+  get:
+    summary: Медиа-файлы по событию безопасности
+    description: |
+      Возвращает список медиа-файлов, привязанных к конкретному событию безопасности.
+      Используется для просмотра фото взлома.
+      Байты не включаются — только метаданные; для скачивания используйте
+      `GET /api/v1/media/{id}`.
+
+      Для relay-фото один item — один JPEG-кадр серии. Кадры доставляются
+      по одному, поэтому список у события дополняется постепенно: поздние
+      кадры появляются при следующем запросе.
+
+      Порядок: `metadata.photo_id` по возрастанию (только если это число),
+      затем `captured_at` и `id` по возрастанию. Записи без `photo_id`
+      (legacy, до мультифото) идут последними.
+    operationId: mediaByEvent
+    tags:
+      - Media
+    security:
+      - RemoteUser: []
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        description: ID события безопасности
+        schema: { type: integer, format: int64 }
+    responses:
+      '200':
+        description: Список медиа-файлов события
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '../schemas/media.yaml#/LockerMedia'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'

@@ -1,0 +1,23 @@
+LoginRequestExample:
+  summary: Запрос авторизации
+  value:
+    phone: "+79991234567"
+    password: "changeme"
+
+VerifyRequestExample:
+  summary: Подтверждение OTP
+  value:
+    phone: "+79991234567"
+    code: "483921"
+
+AuthSuccessResponseExample:
+  summary: Аутентификация успешна (сессионный cookie установлен)
+  value:
+    message: "Authentication successful"
+    name: "Иванов Иван Иванович"
+    role: "administrator"
+
+OtpSentResponseExample:
+  summary: OTP отправлен (учётные данные верны, 2FA включена)
+  value:
+    message: "OTP has been sent"

@@ -1,0 +1,399 @@
+# Internal endpoints — для записи данных другими backend-сервисами.
+#
+# Эти эндпойнты ЗАКРЫТЫ снаружи через Apache (<Location /internal>
+# Require all denied) и доступны только сервисам внутри Docker-сети.
+# Они НЕ требуют X-Remote-User и не выполняют user-level ACM-проверок
+# (trust boundary смещён на сетевой уровень).
+#
+# SEC-05: каналы записи (security/telemetry/media) дополнительно защищены
+# HMAC-подписью X-Internal-Timestamp + X-Internal-Signature ключом
+# INTERNAL_HISTORY_HMAC_KEY (sha256(body), окно ±30 с). Невалидная/устаревшая
+# подпись → 401. Если ключ не сконфигурирован (dev/CI) — проверка пропускается.
+#
+# ARC-02: payload несёт продьюсер-генерируемый event_uid (UUID) для
+# идемпотентности повторной доставки (at-least-once). Дубликат по event_uid
+# не создаёт новую строку: ON CONFLICT DO NOTHING, ответ 200 {"status":"duplicate"}.
+#
+# Документированы здесь, чтобы:
+#   1) разработчики видели полный контракт history_api;
+#   2) генерация клиента/моков покрывала и internal-каналы для тестов.
+
+internal_security_events:
+  post:
+    summary: "[internal] Создать событие безопасности"
+    description: |
+      Запись события безопасности от системы (без X-Remote-User).
+      Используется `state_monitor` (locker_api) для логирования alarm-событий.
+
+      Контракт совпадает с публичным `POST /api/v1/events/security`.
+
+      Если задан `event_uid`, после записи (и на дубликате) к событию
+      привязываются медиа, загруженные раньше него с тем же
+      `security_event_uid`. Ошибка привязки → 500: событие уже записано,
+      повторная доставка придёт как дубликат и повторит привязку.
+
+      Intrusion-событие relay-серии несёт в `metadata` ключи
+      `relay_event_id`, `series_uid`, `photos_cnt`; legacy-окно
+      `POST /internal/api/v1/media` такие события не матчит.
+    operationId: createInternalSecurityEvent
+    tags:
+      - Security Events
+    x-internal: true
+    security: []
+    parameters:
+      - $ref: '#/_InternalHmacTimestamp'
+      - $ref: '#/_InternalHmacSignature'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/security_event.yaml#/SecurityEventCreate'
+    responses:
+      '201':
+        description: Событие успешно создано
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/security_event.yaml#/SecurityEvent'
+      '200':
+        description: Дубликат по event_uid (ARC-02) — идемпотентный no-op
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: duplicate
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+internal_telemetry:
+  post:
+    summary: "[internal] Batch-запись телеметрии"
+    description: |
+      Запись батча показаний датчиков от системы (без X-Remote-User).
+      Используется `TelemetryProducer` (locker_api) после MQTT-ingest
+      сообщения `stat` от реле.
+
+      Лимит — 1000 записей за один запрос.
+    operationId: createInternalTelemetryBatch
+    tags:
+      - Telemetry
+    x-internal: true
+    security: []
+    parameters:
+      - $ref: '#/_InternalHmacTimestamp'
+      - $ref: '#/_InternalHmacSignature'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/telemetry.yaml#/TelemetryBatchRequest'
+    responses:
+      '201':
+        description: |
+          Батч принят. ARC-02: строки с уже виденным event_uid пропущены
+          (ON CONFLICT (event_uid, recorded_at) DO NOTHING). `inserted`
+          отражает число поданных readings, не реально вставленных.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inserted]
+              properties:
+                inserted:
+                  type: integer
+                  description: Количество поданных записей
+                  example: 42
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+internal_command_history:
+  get:
+    summary: "[internal] Выборка истории команд"
+    description: |
+      Обобщённая выборка истории команд с фильтрами (без X-Remote-User).
+      Возвращает ПОЛНЫЕ строки `command_history` в том же формате, что и
+      публичный `GET /api/v1/commands/history`. Используется `reports_api`
+      для построения отчётов (например, события открытия:
+      `command_type=open&status=executed&order=executed_at_asc`).
+    operationId: listInternalCommandHistory
+    tags:
+      - Command History
+    x-internal: true
+    security: []
+    parameters:
+      - name: command_type
+        in: query
+        required: false
+        description: Фильтр по типу команды (например, `open`).
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        description: Фильтр по статусу команды (например, `executed`).
+        schema:
+          type: string
+      - name: executed_from
+        in: query
+        required: false
+        description: Начало диапазона по `executed_at` (включительно), ISO 8601.
+        schema:
+          type: string
+          format: date-time
+      - name: executed_to
+        in: query
+        required: false
+        description: Конец диапазона по `executed_at` (включительно), ISO 8601.
+        schema:
+          type: string
+          format: date-time
+      - name: order
+        in: query
+        required: false
+        description: Порядок сортировки.
+        schema:
+          type: string
+          enum: [created_at_desc, executed_at_asc]
+          default: created_at_desc
+      - name: limit
+        in: query
+        required: false
+        description: Максимальное число записей (default 1000, cap 5000).
+        schema:
+          type: integer
+          default: 1000
+          minimum: 1
+          maximum: 5000
+      - name: offset
+        in: query
+        required: false
+        description: Смещение для пагинации.
+        schema:
+          type: integer
+          default: 0
+          minimum: 0
+    responses:
+      '200':
+        description: Paginated-список записей истории команд
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, total, limit, offset]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '../schemas/command_history.yaml#/CommandHistory'
+                total:
+                  type: integer
+                  description: Общее число подходящих записей (без пагинации)
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+  post:
+    summary: "[internal] Upsert записи истории команды"
+    description: |
+      Идемпотентно создаёт или обновляет запись истории команды по `command_id`
+      (без X-Remote-User). Используется `CommandHistoryProducer` (locker_api)
+      для отслеживания жизненного цикла команды:
+      pending → sent → executed/failed.
+
+      Контракт совпадает с публичным `POST /api/v1/commands/history`.
+    operationId: upsertInternalCommandHistory
+    tags:
+      - Command History
+    x-internal: true
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/command_history.yaml#/CommandHistoryCreate'
+    responses:
+      '200':
+        description: Запись создана или обновлена
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command_history.yaml#/CommandHistory'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+internal_media:
+  post:
+    summary: "[internal] Загрузить медиа-файл шкафа"
+    description: |
+      Загрузка медиа-файла шкафа от системы (без X-Remote-User).
+      Используется `MediaProducer` (locker_api) на каждый кадр
+      `photos` от реле по MQTT.
+
+      Multipart/form-data обязательные поля: `locker_id`, `kind` (photo),
+      `mime_type`, `captured_at` (ISO 8601), `file` (≤10MB).
+      Опциональные: `sensor_id`, `security_event_id`, `security_event_uid`,
+      `width`, `height`, `duration_ms`, `description`, `metadata` (JSON),
+      `event_sensor_id` + `event_occurred_at`.
+
+      Привязка к событию, по приоритету:
+      1. `security_event_id` — явно;
+      2. `security_event_uid` — событие с этим `event_uid`. Если его ещё нет,
+         медиа сохраняется без привязки и привязывается, как только событие
+         будет записано. Окно ±30 с при заданном uid не используется;
+      3. legacy: `event_sensor_id` + `event_occurred_at` — ближайшее событие
+         датчика в окне ±30 с, только среди событий без `metadata.series_uid`.
+    operationId: uploadInternalMedia
+    tags:
+      - Media
+    x-internal: true
+    security: []
+    parameters:
+      - $ref: '#/_InternalHmacTimestamp'
+      - $ref: '#/_InternalHmacSignature'
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [locker_id, kind, mime_type, captured_at, file]
+            properties:
+              locker_id:
+                type: string
+                format: uuid
+              kind:
+                type: string
+                enum: [photo]
+              mime_type:
+                type: string
+                enum: [image/jpeg, image/png]
+              captured_at:
+                type: string
+                format: date-time
+              file:
+                type: string
+                format: binary
+              sensor_id:
+                type: string
+                format: uuid
+              security_event_id:
+                type: integer
+                format: int64
+              width:
+                type: integer
+              height:
+                type: integer
+              duration_ms:
+                type: integer
+              description:
+                type: string
+              metadata:
+                type: string
+                description: JSON-строка с дополнительными метаданными
+              event_sensor_id:
+                type: string
+                format: uuid
+                description: |
+                  UUID датчика для legacy-матчинга события по окну ±30 с
+                  (только события без metadata.series_uid)
+              event_occurred_at:
+                type: string
+                format: date-time
+                description: |
+                  Время срабатывания для legacy-матчинга события по окну ±30 с
+                  (только события без metadata.series_uid)
+              security_event_uid:
+                type: string
+                format: uuid
+                description: |
+                  event_uid события безопасности, к которому относится медиа.
+                  Приоритетнее окна; невалидный UUID → 400.
+              event_uid:
+                type: string
+                format: uuid
+                description: |
+                  ARC-02: продьюсер-генерируемый UUID для идемпотентности.
+                  Повторная доставка того же event_uid → 200 duplicate без
+                  дублирующей вставки 10 MB; привязка по security_event_uid
+                  при этом повторяется.
+    responses:
+      '201':
+        description: Медиа-файл успешно загружен
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: integer
+                  format: int64
+      '200':
+        description: Дубликат по event_uid (ARC-02) — идемпотентный no-op
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: duplicate
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '413':
+        $ref: '../components/responses.yaml#/PayloadTooLarge'
+      '415':
+        $ref: '../components/responses.yaml#/UnsupportedMediaType'
+      '500':
+        description: |
+          Ошибка БД, в том числе ошибка привязки по `security_event_uid`
+          (медиа уже сохранено, повторная доставка придёт как дубликат и
+          повторит привязку).
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+
+# -----------------------------------------------------------------------------
+# Переиспользуемые header-параметры HMAC-подписи (SEC-05).
+# -----------------------------------------------------------------------------
+_InternalHmacTimestamp:
+  name: X-Internal-Timestamp
+  in: header
+  required: false
+  description: |
+    Unix-время (сек) подписи. Обязателен, если INTERNAL_HISTORY_HMAC_KEY
+    сконфигурирован; вне окна ±30 с → 401.
+  schema:
+    type: string
+_InternalHmacSignature:
+  name: X-Internal-Signature
+  in: header
+  required: false
+  description: |
+    HMAC-SHA256(timestamp + sha256(body)) ключом INTERNAL_HISTORY_HMAC_KEY,
+    hex. Обязателен, если ключ сконфигурирован; невалидная → 401.
+  schema:
+    type: string

@@ -1,0 +1,145 @@
+sensor_types:
+  get:
+    summary: Получить список типов датчиков
+    description: |
+      Возвращает список всех типов датчиков с пагинацией.
+      Ответ имеет стандартный формат `{items, total, limit, offset}`.
+    operationId: getSensorTypes
+    tags:
+      - Sensor Types
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список типов датчиков с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor_type.yaml#/SensorTypeListResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать новый тип датчика
+    description: |
+      Создает новый тип датчика в системе.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: createSensorType
+    tags:
+      - Sensor Types
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/sensor_type.yaml#/SensorTypeCreate'
+          example:
+            code: "temperature"
+            name: "Температурный датчик"
+            description: "Датчик для измерения температуры"
+            unit: "°C"
+            value_type: "float"
+    responses:
+      '201':
+        description: Тип датчика успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor_type.yaml#/SensorType'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+
+sensor_types_by_id:
+  get:
+    summary: Получить тип датчика по ID
+    description: Возвращает информацию о конкретном типе датчика
+    operationId: getSensorTypeById
+    tags:
+      - Sensor Types
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/SensorTypeIdPath'
+    responses:
+      '200':
+        description: Данные типа датчика
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor_type.yaml#/SensorType'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  put:
+    summary: Обновить тип датчика
+    description: |
+      Обновляет данные типа датчика. `states`: ключ отсутствует — без
+      изменений, `null` — очистка, массив — полная замена.
+      400 — некорректные `states` (элемент `{value, label, severity}`, `value`
+      int для numeric и bool для boolean, для `string` состояния запрещены,
+      не более 32, label 1..100 символов, значения уникальны).
+      409 — `states` из NULL в список при активных min/max-порогах на активных
+      датчиках этого типа, либо новые `states` убирают значение, на которое
+      указывает активный `fixed_value`-порог.
+    operationId: updateSensorType
+    tags:
+      - Sensor Types
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/SensorTypeIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/sensor_type.yaml#/SensorTypeUpdate'
+    responses:
+      '200':
+        description: Тип датчика успешно обновлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/sensor_type.yaml#/SensorType'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+
+  delete:
+    summary: Удалить тип датчика
+    description: |
+      Удаляет тип датчика из системы. 409 — на тип ссылаются датчики.
+    operationId: deleteSensorType
+    tags:
+      - Sensor Types
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/SensorTypeIdPath'
+    responses:
+      '204':
+        $ref: '../components/responses.yaml#/NoContent'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'

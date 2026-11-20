@@ -1,0 +1,281 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Пользователи</h2>
+            <p class="page-subtitle">Управление персоналом, организациями и доступом</p>
+        </div>
+        <div class="header-actions-row">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchUsers" placeholder="Поиск по ФИО">
+                    <button class="search-clear" id="clearSearch" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <button class="btn-primary btn-with-icon" id="addUserBtn">
+                <i class="fas fa-plus"></i>
+                <span>Добавить пользователя</span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <div class="filter-bar" id="filterBar">
+        <div class="filter-chips" id="filterChips"></div>
+        <div class="filter-controls">
+            <div class="filter-select-wrapper">
+                <select id="filterRole" class="filter-select">
+                    <option value="">Роль: Все</option>
+                    <option value="worker">Рабочий</option>
+                    <option value="operator">Оператор</option>
+                    <option value="administrator">Администратор</option>
+                </select>
+                <i class="fas fa-chevron-down filter-select-arrow"></i>
+            </div>
+            <div class="filter-select-wrapper">
+                <select id="filterState" class="filter-select">
+                    <option value="">Статус: Все</option>
+                    <option value="active">Активный</option>
+                    <option value="deactivated">Отключён</option>
+                </select>
+                <i class="fas fa-chevron-down filter-select-arrow"></i>
+            </div>
+        </div>
+    </div>
+    <div class="users-table-container">
+        <table class="users-table" id="usersTable">
+            <thead>
+                <tr>
+                    <th class="id-column">ID</th>
+                    <th>Сотрудник</th>
+                    <th>Организация</th>
+                    <th>Срок действия</th>
+                    <th>Статус</th>
+                    <th class="actions-column">Действия</th>
+                </tr>
+            </thead>
+            <tbody id="usersList">
+                <!-- Данные загружаются динамически -->
+            </tbody>
+        </table>
+    </div>
+    <div id="paginationContainer" class="pagination-container"></div>
+</div>
+
+<!-- Модальное окно создания/редактирования пользователя -->
+<div class="new-modal-overlay" id="userModal">
+    <div class="new-modal modal-lg">
+        <div class="new-modal-header">
+            <h3 id="modalTitle">Добавить пользователя</h3>
+            <button class="new-modal-close" id="closeModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="new-modal-body">
+            <form id="userForm">
+                <input type="hidden" id="userId">
+
+                <div class="form-section">
+                    <h4><i class="fas fa-user"></i> Личные данные</h4>
+                    <div class="form-group">
+                        <label for="userName">ФИО *</label>
+                        <input type="text" id="userName" required
+                               placeholder="Иванов Иван Иванович">
+                        <div class="error-message" id="userNameError"></div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" id="roleGroup">
+                            <label for="userRole">Роль</label>
+                            <select id="userRole">
+                                <option value="worker">Рабочий</option>
+                                <option value="operator">Оператор</option>
+                                <option value="administrator">Администратор</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="userPhone">Телефон *</label>
+                            <input type="tel" id="userPhone"
+                                   placeholder="Введите номер телефона">
+                            <div class="error-message" id="userPhoneError"></div>
+                        </div>
+                    </div>
+                    <div class="form-group" id="passwordGroup">
+                        <label for="userPassword">Пароль *</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="userPassword" placeholder="Минимум 8 символов">
+                            <button type="button" class="password-toggle" id="togglePassword" title="Показать пароль">
+                                <i class="fas fa-eye" id="togglePasswordIcon"></i>
+                            </button>
+                            <button type="button" class="password-generate" id="generatePassword" title="Сгенерировать пароль">
+                                <i class="fas fa-dice"></i>
+                                <span>Сгенерировать</span>
+                            </button>
+                        </div>
+                        <div class="error-message" id="userPasswordError"></div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h4><i class="fas fa-building"></i> Организация</h4>
+                    <div class="form-group">
+                        <label for="userOrganizationSearch">Организация</label>
+                        <div class="org-combobox" id="orgCombobox">
+                            <input type="text" id="userOrganizationSearch" placeholder="Начните вводить название..." autocomplete="off">
+                            <input type="hidden" id="userOrganization">
+                            <div class="org-dropdown hidden" id="orgDropdown"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section" id="twoFaSection">
+                    <h4><i class="fas fa-shield-alt"></i> Безопасность</h4>
+                    <div class="new-access-full-row">
+                        <label class="access-toggle-label" title="Двухфакторная аутентификация">
+                            <input type="checkbox" id="userTwoFa">
+                            <span class="access-toggle-track"></span>
+                        </label>
+                        <span class="new-access-full-label">Двухфакторная аутентификация (2FA)</span>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn-secondary btn-sm" id="getMaxInviteLinkBtn">
+                            <i class="fas fa-link"></i>
+                            <span>Получить ссылку для привязки MAX</span>
+                        </button>
+                        <div class="max-invite-link-row hidden" id="maxInviteLinkRow">
+                            <input type="text" id="maxInviteLink" readonly>
+                            <button type="button" class="btn-icon" id="copyMaxInviteLinkBtn" title="Скопировать ссылку">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="new-modal-actions">
+            <button type="button" class="btn-secondary" id="cancelBtn">Отмена</button>
+            <button type="button" class="btn-primary" id="saveUserBtn">
+                Сохранить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Тултип для тегов -->
+<div class="tooltip" id="tagsTooltip"></div>
+
+<!-- Модальное окно подтверждения -->
+<div class="new-modal-overlay" id="confirmModal">
+    <div class="new-modal modal-sm">
+        <div class="new-modal-header">
+            <h3 id="confirmModalTitle">Подтверждение</h3>
+            <button class="new-modal-close" id="closeConfirmModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="new-modal-body confirm-body">
+            <div class="confirm-icon-row">
+                <div class="confirm-icon" id="confirmModalIcon">
+                    <i class="fas fa-user-slash" id="confirmModalIconFa"></i>
+                </div>
+                <div>
+                    <p class="confirm-text" id="confirmModalText"></p>
+                    <p class="confirm-subtext" id="confirmModalSubtext"></p>
+                </div>
+            </div>
+            <div class="confirm-date-section hidden" id="confirmDateSection">
+                <label for="confirmExpiryDate">Новый срок действия</label>
+                <input type="date" id="confirmExpiryDate">
+                <div class="form-hint">Оставьте пустым для бессрочного доступа</div>
+            </div>
+        </div>
+        <div class="new-modal-actions">
+            <button type="button" class="btn-secondary" id="confirmModalCancel">Отмена</button>
+            <button type="button" class="btn-danger" id="confirmModalOk">Подтвердить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно доступов -->
+<div class="new-modal-overlay" id="accessModal">
+    <div class="new-modal modal-lg">
+        <div class="new-modal-header">
+            <h3 id="accessModalTitle">Допуски пользователя</h3>
+            <button class="new-modal-close" id="closeAccessModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="new-modal-body">
+            <div class="accesses-loading" id="accessesLoading">
+                <i class="fas fa-spinner fa-spin"></i> Загрузка допусков...
+            </div>
+            <div class="accesses-list" id="accessesList"></div>
+            <div class="accesses-empty hidden" id="accessesEmpty">
+                <i class="fas fa-key"></i>
+                <p>Нет допусков</p>
+            </div>
+
+            <div class="new-access-form hidden" id="newAccessForm">
+                <div class="new-access-form-header">
+                    <span class="new-access-form-title">Новый допуск</span>
+                </div>
+                <div class="access-edit-dates">
+                    <div class="access-edit-field">
+                        <label class="access-edit-label">С</label>
+                        <input type="datetime-local" id="newAccessStart">
+                    </div>
+                    <div class="access-edit-field">
+                        <label class="access-edit-label">По</label>
+                        <input type="datetime-local" id="newAccessEnd">
+                    </div>
+                </div>
+                <div class="new-access-full-row">
+                    <label class="access-toggle-label" title="Полный доступ ко всем шкафам">
+                        <input type="checkbox" id="newAccessFullAccess">
+                        <span class="access-toggle-track"></span>
+                    </label>
+                    <span class="new-access-full-label">Полный доступ (все шкафы)</span>
+                </div>
+                <div class="access-edit-lockers" id="newAccessLockersSection">
+                    <label class="access-edit-label">Шкафы</label>
+                    <div class="access-locker-tags" id="newAccessLockerTags"></div>
+                    <div class="access-locker-input-wrap">
+                        <input type="text" class="access-locker-input" id="newAccessLockerInput"
+                               placeholder="Поиск по инвентарному номеру или адресу" autocomplete="off">
+                        <div class="access-locker-suggestions" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="access-edit-actions">
+                    <button type="button" class="btn-secondary btn-sm" id="cancelNewAccessBtn">Отмена</button>
+                    <button type="button" class="btn-primary btn-sm" id="saveNewAccessBtn">Добавить</button>
+                </div>
+            </div>
+        </div>
+        <div class="new-modal-actions access-modal-actions">
+            <label class="checkbox-label access-inactive-label">
+                <input type="checkbox" id="includeInactiveAccesses">
+                <span class="checkmark"></span>
+                Включать неактивные
+            </label>
+            <div class="access-modal-actions-right">
+                <button type="button" class="btn-secondary" id="cancelAccessBtn">Закрыть</button>
+                <button type="button" class="btn-primary btn-with-icon" id="addAccessBtn">
+                    <i class="fas fa-plus"></i>
+                    <span>Выдать допуск</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Тост-уведомление -->
+<div class="toast-notification" id="toastNotification">
+    <i class="fas fa-check-circle" id="toastIcon"></i>
+    <span id="toastMessage"></span>
+</div>

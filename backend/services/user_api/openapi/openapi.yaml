@@ -1,0 +1,591 @@
+openapi: 3.2.0
+info:
+  title: User API
+  description: API для управления пользователями в системе ScudDocs
+  version: 1.0.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8888/api/v1
+    description: Development server
+  - url: https://api.scuddocs.com/api/v1
+    description: Production server
+
+security:
+  - RemoteUser: []
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+  /live:
+    get:
+      tags:
+        - health
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - health
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                  redis:  { type: string, enum: [ok, unavailable] }
+                required: [status, db, redis]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+  # внутренний batch-эндпоинт resolve ФИО по списку id. Без auth, доступен
+  # только из backend_net — Apache gateway закрывает /internal/* снаружи
+  # (Require all denied). Используется reports_api для «Отчёта по открытию».
+  /internal/users/names:
+    get:
+      summary: Batch-resolve ФИО пользователей по списку id
+      description: |
+        Внутренний эндпоинт. Принимает список user_id (через запятую) и
+        возвращает map id → ФИО. ФИО отдаётся для ЛЮБОГО существующего
+        пользователя независимо от state (исторический отчёт должен показывать
+        ФИО даже деактивированных/удалённых). Несуществующие id просто
+        опускаются из ответа. Не требует аутентификации, доступен только из
+        docker-сети `backend_net`; Apache gateway НЕ проксирует `/internal/*`
+        наружу.
+      tags:
+        - internal
+      security: []
+      parameters:
+        - name: ids
+          in: query
+          required: false
+          description: |
+            Список целых user_id через запятую (например `1,2,3`).
+            Дубликаты игнорируются. Максимум 1000 id. Пустой/отсутствующий —
+            вернёт пустой map.
+          schema:
+            type: string
+          example: '1,2,3'
+      responses:
+        '200':
+          description: Map id → ФИО для найденных пользователей
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - names
+                properties:
+                  names:
+                    type: object
+                    description: >-
+                      Ключ — user_id (строка), значение — ФИО. Содержит только
+                      найденные id.
+                    additionalProperties:
+                      type: string
+                    example:
+                      '1': 'Иванов Иван'
+                      '3': 'Петров Пётр'
+        '400':
+          description: ids невалидны (не целые) или их больше 1000
+
+  # Внутренний эндпоинт проверки учётных данных. Вызывается auth_api на этапе
+  # login (phone + SHA-256(password)). Закрыт снаружи через Apache
+  # (<Location /internal> Require all denied) и HMAC-подписан ключом
+  # INTERNAL_AUTH_HMAC_KEY (общий с auth_api). См. internal_auth.py.
+  /internal/auth/check:
+    post:
+      summary: Внутренний — проверить телефон + хэш пароля
+      description: |
+        HMAC-подписанный эндпоинт. Вызывается auth_api на этапе входа:
+        принимает телефон и SHA-256-хэш пароля, возвращает контекст
+        пользователя (`user_id`, `require_2fa`, ФИО, роль, `max_user_id`).
+
+        Anti-enumeration: `bcrypt.checkpw` выполняется всегда (даже если
+        пользователь не найден / неактивен), поэтому response time не выдаёт
+        существование телефона.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись: `X-Internal-Timestamp` (Unix-секунды) +
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`),
+          ключ — `INTERNAL_AUTH_HMAC_KEY` (общий с auth_api), окно повтора 30 с.
+          Если ключ не задан (dev/CI без `.env`) — проверка пропускается
+          (fail-open); в production ключ обязателен.
+      tags:
+        - internal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password_hash]
+              properties:
+                phone:
+                  type: string
+                  description: Номер телефона пользователя.
+                  example: '+79991234567'
+                password_hash:
+                  type: string
+                  description: SHA-256-хэш открытого пароля в hex.
+      responses:
+        '200':
+          description: Учётные данные верны.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, require_2fa, name, role, max_user_id]
+                properties:
+                  user_id:
+                    type: integer
+                    minimum: 1
+                  require_2fa:
+                    type: boolean
+                    description: Включён ли у пользователя обязательный 2FA.
+                  name:
+                    type: string
+                    description: ФИО пользователя.
+                  role:
+                    type: string
+                    description: Роль пользователя.
+                    enum: [worker, operator, administrator]
+                  max_user_id:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Идентификатор получателя в Max-боте, либо `null`, если
+                      бот ещё не привязан.
+        '400':
+          description: Невалидное тело (нет `phone` или `password_hash`).
+        '401':
+          description: |
+            Подпись невалидна/просрочена ЛИБО учётные данные неверны /
+            пользователь неактивен. Тело ответа отсутствует — клиент не
+            должен различать «неверная подпись» и «неверный пароль».
+
+  # Внутренний resolve user_id по номеру телефона. Вызывается auth_api.
+  # Закрыт снаружи Apache, HMAC-подписан ключом INTERNAL_USER_READ_HMAC_KEY.
+  # См. internal_auth.py InternalUserByPhoneHandler.
+  /internal/user/by-phone:
+    get:
+      summary: Внутренний — получить user_id по номеру телефона
+      description: |
+        HMAC-подписанный PII-read эндпоинт. Возвращает `user_id` активного
+        пользователя по номеру телефона.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись: `X-Internal-Timestamp` (Unix-секунды) +
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`),
+          ключ — `INTERNAL_USER_READ_HMAC_KEY` (общий с auth_api и reports_api),
+          окно повтора 30 с. Для GET body пустой → `sha256("")`. Селектор
+          `phone=` лежит в query, поэтому канонизированный query сворачивается
+          в подписываемый path — подмена значения в пределах окна отвергается
+          (SEC-10). Если ключ не задан (dev/CI) — проверка пропускается.
+      tags:
+        - internal
+      security: []
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          description: Номер телефона пользователя.
+          schema:
+            type: string
+          example: '+79991234567'
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id]
+                properties:
+                  user_id:
+                    type: integer
+                    minimum: 1
+        '400':
+          description: Отсутствует обязательный параметр `phone`.
+        '401':
+          description: HMAC-подпись отсутствует, невалидна или просрочена.
+        '404':
+          description: Активный пользователь с таким телефоном не найден.
+
+  # Внутренний привязки Max-бота к пользователю по invite-токену. Вызывается
+  # notification_api'шным MaxBotPoller. Закрыт снаружи Apache, HMAC-подписан
+  # ключом INTERNAL_MAX_BINDING_HMAC_KEY. См. internal_max_binding.py.
+  /internal/user/by-invite:
+    post:
+      summary: Внутренний — привязать max_user_id по invite-токену
+      description: |
+        HMAC-подписанный эндпоинт. Вызывается notification_api'шным
+        `MaxBotPoller` после события `bot_started`: по invite-токену из
+        deep-link атомарно проставляет `users.max_user_id` и помечает токен
+        использованным. Возвращает `user_id` — воркеру он нужен для доставки
+        отложенных OTP-записей.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись: `X-Internal-Timestamp` (Unix-секунды) +
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`),
+          ключ — `INTERNAL_MAX_BINDING_HMAC_KEY` (общий с notification_api),
+          окно повтора 30 с. Если ключ не задан (dev/CI) — проверка
+          пропускается (fail-open); в production ключ обязателен.
+      tags:
+        - internal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invite_token, max_user_id]
+              properties:
+                invite_token:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                  description: Invite-токен из `start=<token>` deep-link.
+                max_user_id:
+                  type: integer
+                  minimum: 1
+                  description: Идентификатор нажавшего «Начать» в Max-боте.
+      responses:
+        '200':
+          description: Привязка установлена.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id]
+                properties:
+                  user_id:
+                    type: integer
+                    minimum: 1
+                    description: ID привязанного пользователя.
+        '400':
+          description: Невалидный DTO (пустой/слишком длинный токен, неверный `max_user_id`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: HMAC-подпись отсутствует, невалидна или просрочена.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Токен не найден, истёк или уже использован.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: '`max_user_id` уже привязан к другому активному аккаунту.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # Внутренний resolve id + роль по числовому user_id. Вызывается auth_api /
+  # reports_api. Закрыт снаружи Apache, HMAC-подписан ключом
+  # INTERNAL_USER_READ_HMAC_KEY. См. internal_auth.py InternalUserByIdHandler.
+  # Отдельный path от /internal/user/{user_id}/max-context — коллизии нет.
+  /internal/user/{user_id}:
+    get:
+      summary: Внутренний — получить id и роль пользователя по ID
+      description: |
+        HMAC-подписанный PII-read эндпоинт. Возвращает `id` и `role`
+        пользователя по числовому ID.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись: `X-Internal-Timestamp` (Unix-секунды) +
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`),
+          ключ — `INTERNAL_USER_READ_HMAC_KEY` (общий с auth_api и reports_api),
+          окно повтора 30 с. Для GET body пустой → `sha256("")`. `user_id`
+          входит в подписываемый path — привязан подписью (SEC-10). Если ключ
+          не задан (dev/CI) — проверка пропускается (fail-open).
+      tags:
+        - internal
+      security: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: Целый ID пользователя.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, role]
+                properties:
+                  id:
+                    type: integer
+                    minimum: 1
+                  role:
+                    type: string
+                    description: Роль пользователя.
+                    enum: [worker, operator, administrator]
+        '400':
+          description: '`user_id` не целое число.'
+        '401':
+          description: HMAC-подпись отсутствует, невалидна или просрочена.
+        '404':
+          description: Пользователь не найден.
+
+  # Внутренний эндпоинт для step-up flow в auth_api. Возвращает
+  # require_2fa + max_user_id + phone конкретного пользователя — лёгкая
+  # read-only альтернатива /internal/auth/check (тот идёт по phone +
+  # password_hash). Закрыт снаружи через Apache (<Location /internal>) и
+  # HMAC-подписан ключом INTERNAL_STEP_UP_HMAC_KEY (общий с auth_api). См.
+  # internal_max_context.py.
+  /internal/user/{user_id}/max-context:
+    get:
+      summary: Внутренний — контекст 2FA, phone и привязки Max для пользователя
+      description: |
+        HMAC-подписанный read-only эндпоинт. Используется auth_api на этапе
+        step-up OTP issue (`/internal/api/v1/step-up/issue`). Возвращает
+        флаг `require_2fa`, `phone` и `max_user_id` пользователя: `phone`
+        (NOT NULL) даёт auth_api SMS-primary доставку OTP command-2FA;
+        `max_user_id` используется как fallback/дополнительный канал, когда
+        доступен.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись:
+          `X-Internal-Timestamp` (Unix-секунды) и
+          `X-Internal-Signature`
+          (HMAC-SHA256 над
+          `timestamp + "\n" + METHOD + "\n" + path + "\n" + sha256(body)`,
+          для GET body пустой → `sha256("")`),
+          ключ — `INTERNAL_STEP_UP_HMAC_KEY` (общий с auth_api).
+          Запросы с невалидной/просроченной (>30 с) подписью — 401.
+      tags:
+        - internal
+      security: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: Целый ID пользователя из user_api.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Контекст пользователя для step-up flow.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [require_2fa, max_user_id, phone]
+                properties:
+                  require_2fa:
+                    type: boolean
+                    description: Включён ли у пользователя обязательный 2FA.
+                  max_user_id:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Идентификатор получателя в Max-боте. `null`, если
+                      пользователь ещё не привязал бота — auth_api доставит
+                      OTP по `phone` (SMS-primary) вместо Max.
+                  phone:
+                    type: string
+                    description: |
+                      Телефон пользователя (NOT NULL). Основной канал
+                      доставки OTP command-2FA.
+        '400':
+          description: user_id не целое число.
+        '401':
+          description: HMAC-подпись отсутствует, невалидна или просрочена.
+        '404':
+          description: Пользователь не найден.
+  /users:
+    $ref: './paths/users.yaml#/users'
+  /user/{user_id}:
+    $ref: './paths/users.yaml#/users_by_id'
+  /user/{user_id}/reactivate:
+    $ref: './paths/users.yaml#/user_reactivate'
+  /user/{user_id}/enable-2fa:
+    $ref: './paths/users.yaml#/user_enable_2fa'
+  /user/{user_id}/disable-2fa:
+    $ref: './paths/users.yaml#/user_disable_2fa'
+  /accesses/batch:
+    $ref: './paths/accesses.yaml#/accesses_batch'
+  /user/{user_id}/accesses:
+    $ref: './paths/accesses.yaml#/user_accesses'
+  /access/{access_id}:
+    $ref: './paths/accesses.yaml#/access_by_id'
+  /access/{access_id}/reactivate:
+    $ref: './paths/accesses.yaml#/access_reactivate'
+  /contractors:
+    $ref: './paths/contractors.yaml#/contractors'
+  /contractor/{contractor_id}:
+    $ref: './paths/contractors.yaml#/contractors_by_id'
+  /emergency-requests:
+    $ref: './paths/emergency_requests.yaml#/emergency-requests'
+  /emergency-request/{id}:
+    $ref: './paths/emergency_requests.yaml#/emergency-request-by-id'
+  /emergency-request/{id}/logs:
+    $ref: './paths/emergency_requests.yaml#/emergency-request-by-id-logs'
+
+components:
+  schemas:
+    User:
+      $ref: './schemas/user.yaml#/User'
+    UserState:
+      $ref: './schemas/user.yaml#/UserState'
+    UserRole:
+      $ref: './schemas/user.yaml#/UserRole'
+    Contractor:
+      $ref: './schemas/contractor.yaml#/Contractor'
+    CreateUserRequest:
+      $ref: './schemas/requests.yaml#/CreateUserRequest'
+    UpdateUserRequest:
+      $ref: './schemas/requests.yaml#/UpdateUserRequest'
+    CreateContractorRequest:
+      $ref: './schemas/requests.yaml#/CreateContractorRequest'
+    UpdateContractorRequest:
+      $ref: './schemas/requests.yaml#/UpdateContractorRequest'
+    UserAccess:
+      $ref: './schemas/access.yaml#/UserAccess'
+    CreateUserAccessRequest:
+      $ref: './schemas/access.yaml#/CreateUserAccessRequest'
+    UpdateUserAccessRequest:
+      $ref: './schemas/access.yaml#/UpdateUserAccessRequest'
+    UserAccessListResponse:
+      $ref: './schemas/access.yaml#/UserAccessListResponse'
+    BatchAccessRequest:
+      $ref: './schemas/access.yaml#/BatchAccessRequest'
+    BatchAccessResponse:
+      $ref: './schemas/access.yaml#/BatchAccessResponse'
+    EmergencyRequest:
+      $ref: './schemas/emergency_request.yaml#/EmergencyRequest'
+    EmergencyRequestWithDetails:
+      $ref: './schemas/emergency_request.yaml#/EmergencyRequestWithDetails'
+    EmergencyRequestLog:
+      $ref: './schemas/emergency_request.yaml#/EmergencyRequestLog'
+    CreateEmergencyRequestRequest:
+      $ref: './schemas/emergency_request.yaml#/CreateEmergencyRequestRequest'
+    EmergencyRequestListResponse:
+      $ref: './schemas/emergency_request.yaml#/EmergencyRequestListResponse'
+    ProblemDetails:
+      $ref: './schemas/error.yaml#/ProblemDetails'
+    UserListResponse:
+      $ref: './schemas/response_wrappers.yaml#/UserListResponse'
+    ContractorListResponse:
+      $ref: './schemas/response_wrappers.yaml#/ContractorListResponse'
+    EmergencyRequestLogListResponse:
+      $ref: './schemas/response_wrappers.yaml#/EmergencyRequestLogListResponse'
+    Enable2FAInviteResponse:
+      $ref: './schemas/response_wrappers.yaml#/Enable2FAInviteResponse'
+    # Общие поля
+    IdField:
+      $ref: './schemas/common_fields.yaml#/IdField'
+    NullableIdField:
+      $ref: './schemas/common_fields.yaml#/NullableIdField'
+    UserId:
+      $ref: './schemas/common_fields.yaml#/UserId'
+    NullableUserId:
+      $ref: './schemas/common_fields.yaml#/NullableUserId'
+    LockerId:
+      $ref: './schemas/common_fields.yaml#/LockerId'
+    ContractorId:
+      $ref: './schemas/common_fields.yaml#/ContractorId'
+    NullableContractorId:
+      $ref: './schemas/common_fields.yaml#/NullableContractorId'
+    AccessId:
+      $ref: './schemas/common_fields.yaml#/AccessId'
+    RequestId:
+      $ref: './schemas/common_fields.yaml#/RequestId'
+    NullableRequestId:
+      $ref: './schemas/common_fields.yaml#/NullableRequestId'
+    LockerIdArray:
+      $ref: './schemas/common_fields.yaml#/LockerIdArray'
+    Timestamp:
+      $ref: './schemas/common_fields.yaml#/Timestamp'
+    NullableTimestamp:
+      $ref: './schemas/common_fields.yaml#/NullableTimestamp'
+    PaginationTotal:
+      $ref: './schemas/common_fields.yaml#/PaginationTotal'
+    PaginationLimit:
+      $ref: './schemas/common_fields.yaml#/PaginationLimit'
+    PaginationOffset:
+      $ref: './schemas/common_fields.yaml#/PaginationOffset'
+
+  parameters:
+    $ref: './components/parameters.yaml'
+
+  responses:
+    $ref: './components/responses.yaml'
+
+  examples:
+    $ref: './components/examples.yaml'
+
+  securitySchemes:
+    $ref: './components/securitySchemes.yaml'

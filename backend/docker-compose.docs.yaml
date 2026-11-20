@@ -1,0 +1,97 @@
+# ScudDocs Backend - OpenAPI Documentation Viewer
+# Используется для просмотра всех OpenAPI спецификаций проекта
+
+services:
+  # User API Documentation - http://localhost:8080
+  redoc-user-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-user-api
+    ports:
+      - "8080:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/user_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # Locker API Documentation - http://localhost:8081
+  redoc-locker-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-locker-api
+    ports:
+      - "8081:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/locker_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # History API Documentation - http://localhost:8082
+  redoc-history-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-history-api
+    ports:
+      - "8082:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/history_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # Auth API Documentation - http://localhost:8083
+  redoc-auth-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-auth-api
+    ports:
+      - "8083:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/auth_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # Notification API Documentation - http://localhost:8084
+  redoc-notification-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-notification-api
+    ports:
+      - "8084:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/notification_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # Reports API Documentation - http://localhost:8086
+  redoc-reports-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-reports-api
+    ports:
+      - "8086:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/reports_api/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # ACM API Documentation - http://localhost:8087
+  redoc-acm-api:
+    image: redocly/redoc
+    container_name: scuddocs-redoc-acm-api
+    ports:
+      - "8087:80"
+    environment:
+      - SPEC_URL=/spec/openapi.yaml
+    volumes:
+      - ./services/acm/openapi:/usr/share/nginx/html/spec:ro
+    restart: unless-stopped
+
+  # Documentation Index Page - http://localhost:8090
+  docs-index:
+    image: nginx:alpine
+    container_name: scuddocs-docs-index
+    ports:
+      - "8090:80"
+    volumes:
+      - ./docs:/usr/share/nginx/html:ro
+    restart: unless-stopped

@@ -1,0 +1,61 @@
+; PgBouncer transaction-pooler config template.
+; entrypoint.sh подставляет ${PGB_*} через envsubst и пишет результат в
+; /etc/pgbouncer/pgbouncer.ini при каждом старте. Один пулер обслуживает РОВНО
+; один postgres-инстанс (SEC-24: blast-radius — каждый пулер монтирует только
+; секрет своего инстанса). Auth-файл (userlist.txt) генерируется entrypoint'ом
+; из смонтированного password-секрета.
+
+[databases]
+; Одна логическая БД на пулер. Клиенты подключаются под именем ${PGB_DB_NAME}
+; (scud_<db>) — оно совпадает с реальным dbname на postgres, поэтому
+; psycopg2-конфиг сервисов (DB_NAME=scud_<db>) не меняется, только хост/порт.
+${PGB_DB_NAME} = host=${PGB_DB_HOST} port=5432 dbname=${PGB_DB_NAME}
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+
+; SCRAM-SHA-256: пароли в userlist.txt хранятся как plaintext-литералы, а
+; pgbouncer на лету считает SCRAM-верификацию и для клиента, и при логине в
+; postgres. userlist.txt пишет entrypoint из секрета (0600).
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+
+; Транзакционный пулинг: соединение к postgres держится только на время одной
+; транзакции и сразу возвращается в пул. Безопасно для нашего кода — каждый
+; вызов AsyncPostgres = одна короткая single-statement транзакция, без
+; prepared statements / advisory locks / session SET / LISTEN-NOTIFY
+; (см. backend/CONVENTIONS.md и backend/DEPLOYMENT.md).
+pool_mode = transaction
+
+; CRITICAL: psycopg2 шлёт application_name (например acm передаёт 'acm', а
+; AsyncPostgres по умолчанию 'async-postgres-connector') и иногда
+; extra_float_digits. Без игнора этих startup-параметров pgbouncer в
+; transaction-режиме отклоняет подключение с "unsupported startup parameter".
+ignore_startup_parameters = extra_float_digits,application_name
+
+; Размер пула серверных соединений к postgres на пару (user, db). Сумма по
+; всем 6 пулерам должна укладываться в postgres max_connections (дефолт 100)
+; с запасом на reserve + superuser + админ-подключения. Env-driven из compose.
+default_pool_size = ${PGB_DEFAULT_POOL_SIZE}
+; Дополнительные соединения сверх пула при всплеске (выдаются с задержкой
+; reserve_pool_timeout). Держим небольшим, чтобы не пробить max_connections.
+reserve_pool_size = ${PGB_RESERVE_POOL_SIZE}
+reserve_pool_timeout = 3
+
+; Потолок клиентских (frontend) подключений к самому пулеру. Высокий: клиентов
+; много (thread-pool каждого сервиса), но к postgres уходит не больше
+; default_pool_size одновременно.
+max_client_conn = ${PGB_MAX_CLIENT_CONN}
+
+; Админ/статистика через `psql -p 6432 pgbouncer` под ролью pgb_admin
+; (см. userlist.txt) — SHOW POOLS / SHOW STATS / SHOW CLIENTS.
+admin_users = pgb_admin
+stats_users = pgb_admin
+
+; Логи в stdout (docker logs); файловый лог не нужен.
+logfile =
+pidfile = /var/run/pgbouncer/pgbouncer.pid
+
+; Проверка живости серверного соединения перед выдачей из пула.
+server_check_query = select 1

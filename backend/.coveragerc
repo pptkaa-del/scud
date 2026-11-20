@@ -1,0 +1,31 @@
+# Runtime coverage config для *_tests контейнеров (bind-mounted в
+# /coverage-config/coveragerc через docker-compose).
+#
+# Содержит ТОЛЬКО `[run]` (трассировка) и `[report]` (минимальные настройки):
+# секция `[paths]` сознательно отсутствует. Причина: pytest-cov делает
+# финальный report при выходе теста в контейнере (cwd=/app/<svc>), и
+# coverage интерпретирует target paths из `[paths]` ОТНОСИТЕЛЬНО этого cwd.
+# Пример промаха: target `backend/shared/foo.py` относительно cwd=/app/auth_api
+# резолвится в `/app/auth_api/backend/shared/foo.py`, файла нет → coverage
+# отбрасывает mapping, оставляя путь raw и затем спотыкается на "No source
+# for code: ...". Это не security path-injection, а конфликт mapping.
+# Без `[paths]` pytest-cov оставляет raw пути (/app/<svc>/app/..., /app/shared/...);
+# нормализация делается на CI runner через `coverage combine --rcfile=../pyproject.toml`
+# из cwd=backend/, где target paths из `[tool.coverage.paths]` (`services/<svc>/`,
+# `shared/`) существуют физически. cwd=backend/ — стандарт всего workflow
+# (там же docker compose, секреты).
+
+[run]
+branch = True
+parallel = True
+source =
+    app
+    shared
+omit =
+    */tests/*
+    */migrations/*
+    */__init__.py
+disable_warnings = module-not-imported,no-data-collected,couldnt-parse
+
+[report]
+skip_empty = True

@@ -1,0 +1,271 @@
+openapi: 3.2.0
+info:
+  title: Locker API
+  description: |
+    API для управления телекоммуникационными шкафами в системе ScudDocs СКУД.
+
+    ## Аутентификация
+
+    ### Control Gateway (REST API)
+    - Заголовок `X-Remote-User` с ID пользователя
+    - Аутентификация выполняется на API Gateway
+    - Locker API доверяет прокинутому user-context
+
+    ### Device Gateway (MQTT)
+    - Релейные платы (transport='mqtt') подключаются к брокеру;
+      идентифицируются через `relay_id`
+    - Описание протокола: см. [openapi_relay.md](./openapi_relay.md)
+  version: 1.1.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8001/api/v1
+    description: Local development server
+
+tags:
+  - name: Lockers
+    description: Операции с шкафами
+  - name: Sensor Types
+    description: Управление типами датчиков
+  - name: Sensors
+    description: Операции с датчиками
+  - name: Thresholds
+    description: Управление пороговыми значениями
+  - name: Commands
+    description: Управление командами
+  - name: Relays
+    description: Блок реле платы шкафа
+
+security:
+  - RemoteUser: []
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+
+  /live:
+    get:
+      tags:
+        - health
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - health
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                  mqtt:   { type: string, enum: [ok, unavailable] }
+                required: [status, db, mqtt]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+
+  # Lockers
+  /lockers:
+    $ref: './paths/lockers.yaml#/lockers'
+
+  /lockers/batch:
+    $ref: './paths/lockers.yaml#/lockers_batch'
+
+  /locker/{lockerId}:
+    $ref: './paths/lockers.yaml#/lockers_by_id'
+
+  /locker/{lockerId}/state:
+    $ref: './paths/lockers.yaml#/lockers_by_id_state'
+
+  /locker/{lockerId}/relays:
+    $ref: './paths/relays.yaml#/relays'
+
+  /locker/{lockerId}/relays/{channel}:
+    $ref: './paths/relays.yaml#/relays_by_channel'
+
+  # Sensor Types
+  /sensor-types:
+    $ref: './paths/sensor_types.yaml#/sensor_types'
+
+  /sensor-types/{typeId}:
+    $ref: './paths/sensor_types.yaml#/sensor_types_by_id'
+
+  # Sensors
+  /locker/{lockerId}/sensors:
+    $ref: './paths/sensors.yaml#/sensors'
+
+  /locker/{lockerId}/sensors/{sensorId}:
+    $ref: './paths/sensors.yaml#/sensors_by_id'
+
+  # Thresholds
+  /locker/{lockerId}/sensors/{sensorId}/thresholds:
+    $ref: './paths/thresholds.yaml#/thresholds'
+
+  /locker/{lockerId}/sensors/{sensorId}/thresholds/{thresholdId}:
+    $ref: './paths/thresholds.yaml#/thresholds_by_id'
+
+  # Commands
+  /locker/{lockerId}/commands:
+    $ref: './paths/commands.yaml#/commands'
+
+  /locker/{lockerId}/commands/confirm:
+    $ref: './paths/commands.yaml#/commands_confirm'
+
+  /locker/{lockerId}/commands/{commandId}:
+    $ref: './paths/commands.yaml#/commands_by_id'
+
+components:
+  securitySchemes:
+    $ref: './components/securitySchemes.yaml'
+
+  parameters:
+    $ref: './components/parameters.yaml'
+
+  responses:
+    $ref: './components/responses.yaml'
+
+  schemas:
+    # Common Fields
+    LockerId:
+      $ref: './schemas/common_fields.yaml#/LockerId'
+    SensorId:
+      $ref: './schemas/common_fields.yaml#/SensorId'
+    ThresholdId:
+      $ref: './schemas/common_fields.yaml#/ThresholdId'
+    CommandId:
+      $ref: './schemas/common_fields.yaml#/CommandId'
+    SensorTypeId:
+      $ref: './schemas/common_fields.yaml#/SensorTypeId'
+    UserId:
+      $ref: './schemas/common_fields.yaml#/UserId'
+    NullableUserId:
+      $ref: './schemas/common_fields.yaml#/NullableUserId'
+    Timestamp:
+      $ref: './schemas/common_fields.yaml#/Timestamp'
+    NullableTimestamp:
+      $ref: './schemas/common_fields.yaml#/NullableTimestamp'
+
+    # Error
+    ProblemDetails:
+      $ref: './schemas/error.yaml#/ProblemDetails'
+
+    # Locker
+    Locker:
+      $ref: './schemas/locker.yaml#/Locker'
+    LockerCreate:
+      $ref: './schemas/locker.yaml#/LockerCreate'
+    LockerUpdate:
+      $ref: './schemas/locker.yaml#/LockerUpdate'
+    LockerStateUpdate:
+      $ref: './schemas/locker.yaml#/LockerStateUpdate'
+    LockerStateResponse:
+      $ref: './schemas/locker.yaml#/LockerStateResponse'
+
+    # Sensor Type
+    SensorType:
+      $ref: './schemas/sensor_type.yaml#/SensorType'
+    SensorValueType:
+      $ref: './schemas/sensor_type.yaml#/SensorValueType'
+    SensorTypeCreate:
+      $ref: './schemas/sensor_type.yaml#/SensorTypeCreate'
+    SensorTypeUpdate:
+      $ref: './schemas/sensor_type.yaml#/SensorTypeUpdate'
+    SensorTypeListResponse:
+      $ref: './schemas/sensor_type.yaml#/SensorTypeListResponse'
+    SensorStateOption:
+      $ref: './schemas/sensor_type.yaml#/SensorStateOption'
+
+    # Sensor
+    Sensor:
+      $ref: './schemas/sensor.yaml#/Sensor'
+    SensorCreate:
+      $ref: './schemas/sensor.yaml#/SensorCreate'
+    SensorActiveStatusUpdate:
+      $ref: './schemas/sensor.yaml#/SensorActiveStatusUpdate'
+    SensorListResponse:
+      $ref: './schemas/sensor.yaml#/SensorListResponse'
+    SensorDisplay:
+      $ref: './schemas/sensor.yaml#/SensorDisplay'
+    SensorDisplaySeverity:
+      $ref: './schemas/sensor.yaml#/SensorDisplaySeverity'
+
+    # Threshold
+    Threshold:
+      $ref: './schemas/threshold.yaml#/Threshold'
+    ThresholdCreate:
+      $ref: './schemas/threshold.yaml#/ThresholdCreate'
+    ThresholdUpdate:
+      $ref: './schemas/threshold.yaml#/ThresholdUpdate'
+    ThresholdListResponse:
+      $ref: './schemas/threshold.yaml#/ThresholdListResponse'
+
+    # Command
+    Command:
+      $ref: './schemas/command.yaml#/Command'
+    CommandType:
+      $ref: './schemas/command.yaml#/CommandType'
+    CommandStatus:
+      $ref: './schemas/command.yaml#/CommandStatus'
+    CommandCreate:
+      $ref: './schemas/command.yaml#/CommandCreate'
+    CommandListResponse:
+      $ref: './schemas/command.yaml#/CommandListResponse'
+
+    # Relay
+    RelayItem:
+      $ref: './schemas/relay.yaml#/RelayItem'
+    RelayListResponse:
+      $ref: './schemas/relay.yaml#/RelayListResponse'
+    RelayUpdate:
+      $ref: './schemas/relay.yaml#/RelayUpdate'
+
+    # Locker Batch
+    LockerBrief:
+      $ref: './schemas/locker.yaml#/LockerBrief'
+    BatchLockerRequest:
+      $ref: './schemas/locker.yaml#/BatchLockerRequest'
+    BatchLockerResponse:
+      $ref: './schemas/locker.yaml#/BatchLockerResponse'

@@ -1,0 +1,150 @@
+notifications:
+  get:
+    summary: Получить список уведомлений
+    description: |
+      Возвращает список уведомлений с фильтрацией.
+      Поддерживается фильтрация по типу, пользователю, роли и тегам.
+    operationId: getNotifications
+    tags:
+      - Notifications
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/NotificationTypeQuery'
+      - $ref: '../components/parameters.yaml#/UserIdQuery'
+      - $ref: '../components/parameters.yaml#/RoleQuery'
+      - $ref: '../components/parameters.yaml#/TagKeyQuery'
+      - $ref: '../components/parameters.yaml#/TagValueQuery'
+      - $ref: '../components/parameters.yaml#/ActiveOnlyQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список уведомлений с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/notification.yaml#/NotificationListResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать уведомление
+    description: |
+      Создает новое уведомление. Обязательные поля для persistent:
+      start_at, user_ids или roles.
+    operationId: createNotification
+    tags:
+      - Notifications
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/notification.yaml#/CreateNotificationRequest'
+          examples:
+            persistent:
+              summary: Постоянное уведомление по ролям
+              value:
+                type: persistent
+                text: "Шкаф СО №777 в состоянии alarm"
+                tags:
+                  locker_id: "550e8400-e29b-41d4-a716-446655440000"
+                  severity: "high"
+                start_at: "2024-01-15T12:00:00Z"
+                roles: ["operator", "administrator"]
+            lockerOpened:
+              summary: Шкаф открыт (создаётся автоматически locker_api при выполнении команды open)
+              value:
+                type: persistent
+                text: "Шкаф СО №777 открыт. Открыл пользователь с ID: 42. Уведомление будет снято автоматически после закрытия шкафа, либо вручную оператором или администратором."
+                tags:
+                  event: "locker_opened"
+                  locker_id: "550e8400-e29b-41d4-a716-446655440000"
+                  opened_by_user_id: "42"
+                  dismiss_by: "operator_or_service"
+                start_at: "2024-01-15T12:00:00Z"
+                roles: ["operator", "administrator"]
+            thresholdViolation:
+              summary: Нарушение порогового значения датчика (создаётся автоматически locker_api)
+              value:
+                type: persistent
+                text: "Нарушение порогового значения в шкафу (ID: 550e8400-e29b-41d4-a716-446655440000). Датчик: Температура (тип: temperature, серийный №SN-TEMP-001, ID: 660e8400-e29b-41d4-a716-446655440001). Нарушены параметры: Value 55.0 exceeds max threshold 50.0."
+                tags:
+                  event: "threshold_violation"
+                  locker_id: "550e8400-e29b-41d4-a716-446655440000"
+                  sensor_id: "660e8400-e29b-41d4-a716-446655440001"
+                  sensor_type_code: "temperature"
+                  sensor_type_name: "Температура"
+                  sensor_serial: "SN-TEMP-001"
+                start_at: "2024-01-15T12:00:00Z"
+                roles: ["operator", "administrator"]
+    responses:
+      '201':
+        description: Уведомление создано
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/notification.yaml#/NotificationWithRecipients'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+notification_by_id:
+  get:
+    summary: Получить уведомление по ID
+    description: Возвращает уведомление с его получателями
+    operationId: getNotificationById
+    tags:
+      - Notifications
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/NotificationIdPath'
+    responses:
+      '200':
+        description: Уведомление с получателями
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/notification.yaml#/NotificationWithRecipients'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  delete:
+    summary: Отменить уведомление
+    description: |
+      Отменяет уведомление (устанавливает is_cancelled=true).
+      Постоянные уведомления перестают быть видимыми в фильтрах с
+      active_only=true.
+    operationId: cancelNotification
+    tags:
+      - Notifications
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/NotificationIdPath'
+    responses:
+      '200':
+        description: Уведомление отменено
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/notification.yaml#/Notification'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

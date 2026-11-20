@@ -1,0 +1,245 @@
+accesses_batch:
+  post:
+    summary: Получить допуски нескольких пользователей
+    description: |
+      Возвращает допуски для списка пользователей за один запрос.
+      Ключи ответа — строковые user_id; пользователи без допусков
+      присутствуют в ответе с пустым массивом.
+    operationId: batchGetUserAccesses
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/access.yaml#/BatchAccessRequest'
+          examples:
+            default:
+              $ref: '../components/examples.yaml#/BatchAccessRequestExample'
+    responses:
+      '200':
+        description: Допуски для запрошенных пользователей
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/BatchAccessResponse'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/BatchAccessResponseExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+user_accesses:
+  get:
+    summary: Получить список допусков пользователя
+    description: |
+      Возвращает список допусков указанного пользователя с пагинацией.
+      Можно включить деактивированные допуски с параметром include_inactive.
+      Ответ имеет стандартный формат `{items, total, limit, offset}`.
+    operationId: getUserAccesses
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+      - $ref: '../components/parameters.yaml#/IncludeInactiveQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список допусков пользователя
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/UserAccessListResponse'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserAccessListExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Предоставить допуск пользователю
+    description: |
+      Создает новый допуск для указанного пользователя.
+      granted_by устанавливается автоматически из X-Remote-User header.
+    operationId: createUserAccess
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/UserIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/access.yaml#/CreateUserAccessRequest'
+          examples:
+            fullAccess:
+              summary: Полный доступ ко всем шкафам
+              value:
+                start_at: "2024-01-15T00:00:00Z"
+                end_at: "2024-12-31T23:59:59Z"
+                full_access: true
+            specificLockers:
+              summary: Доступ к конкретным шкафам
+              value:
+                start_at: "2024-01-15T00:00:00Z"
+                end_at: "2024-12-31T23:59:59Z"
+                full_access: false
+                locker_ids: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002']
+                request_id: 42
+    responses:
+      '201':
+        description: Допуск успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/UserAccess'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserAccessExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+access_by_id:
+  get:
+    summary: Получить допуск по ID
+    description: |
+      Возвращает детальную информацию о допуске по его ID.
+    operationId: getAccessById
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/AccessIdPath'
+    responses:
+      '200':
+        description: Информация о допуске
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/UserAccess'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserAccessExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  patch:
+    summary: Обновить допуск
+    description: |
+      Обновляет допуск: продлевает срок действия или изменяет список доступных шкафов.
+      Частичное обновление - можно указать только изменяемые поля.
+    operationId: updateAccess
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/AccessIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/access.yaml#/UpdateUserAccessRequest'
+          examples:
+            extendPeriod:
+              summary: Продлить срок действия
+              value:
+                end_at: "2025-12-31T23:59:59Z"
+            changeLockers:
+              summary: Изменить список шкафов
+              value:
+                locker_ids: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440004']
+    responses:
+      '200':
+        description: Допуск успешно обновлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/UserAccess'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  delete:
+    summary: Деактивировать допуск
+    description: |
+      Деактивирует допуск (устанавливает is_active=false).
+      Допуск не удаляется физически, а помечается как неактивный.
+      Возвращает статус 204 No Content при успешной деактивации.
+    operationId: deactivateAccess
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/AccessIdPath'
+    responses:
+      '204':
+        description: Допуск успешно деактивирован
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+access_reactivate:
+  post:
+    summary: Реактивировать допуск
+    description: |
+      Реактивирует ранее деактивированный допуск (устанавливает is_active=true).
+    operationId: reactivateAccess
+    tags:
+      - User Accesses
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/AccessIdPath'
+    responses:
+      '200':
+        description: Допуск успешно реактивирован
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/access.yaml#/UserAccess'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/UserAccessExample'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

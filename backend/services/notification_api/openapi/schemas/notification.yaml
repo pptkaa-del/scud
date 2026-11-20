@@ -1,0 +1,140 @@
+NotificationType:
+  type: string
+  description: Тип уведомления
+  enum:
+    - persistent
+  example: persistent
+
+Notification:
+  type: object
+  description: Уведомление в системе СКУД
+  required:
+    - id
+    - type
+    - text
+    - tags
+    - is_cancelled
+    - created_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/NotificationId'
+    type:
+      $ref: '#/NotificationType'
+    text:
+      type: string
+      description: Текст уведомления
+      example: "Шкаф СО №777 перешел в состояние alarm"
+    tags:
+      type: object
+      additionalProperties:
+        type: string
+      description: Произвольные теги для фильтрации (ключ:значение)
+      example:
+        locker_id: "550e8400-e29b-41d4-a716-446655440000"
+        severity: "high"
+    start_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    is_cancelled:
+      type: boolean
+      description: Отменено ли уведомление
+      example: false
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    created_by:
+      type: integer
+      format: int64
+      nullable: true
+      description: ID пользователя, создавшего уведомление
+
+NotificationRecipient:
+  type: object
+  description: Получатель уведомления
+  required:
+    - id
+    - notification_id
+  properties:
+    id:
+      type: integer
+      format: int64
+    notification_id:
+      $ref: './common_fields.yaml#/NotificationId'
+    user_id:
+      type: integer
+      format: int64
+      nullable: true
+      description: ID пользователя (для persistent)
+    role:
+      type: string
+      nullable: true
+      description: Роль (для persistent)
+      example: "operator"
+
+NotificationWithRecipients:
+  type: object
+  description: Уведомление с получателями
+  required:
+    - notification
+    - recipients
+  properties:
+    notification:
+      $ref: '#/Notification'
+    recipients:
+      type: array
+      items:
+        $ref: '#/NotificationRecipient'
+
+NotificationListResponse:
+  type: object
+  description: Список уведомлений с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Notification'
+    total:
+      type: integer
+      description: Общее количество уведомлений (без учёта пагинации)
+      example: 42
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0
+
+CreateNotificationRequest:
+  type: object
+  description: |
+    Запрос на создание уведомления.
+    Обязательные поля для persistent: start_at, user_ids или roles.
+  required:
+    - type
+    - text
+  properties:
+    type:
+      $ref: '#/NotificationType'
+    text:
+      type: string
+      description: Текст уведомления
+    tags:
+      type: object
+      additionalProperties:
+        type: string
+      description: Произвольные теги (ключ:значение)
+      default: {}
+    start_at:
+      type: string
+      format: date-time
+      description: Дата начала действия (для persistent)
+    user_ids:
+      type: array
+      items:
+        type: integer
+        format: int64
+      description: ID пользователей-получателей (для persistent)
+    roles:
+      type: array
+      items:
+        type: string
+      description: Роли получателей (для persistent)

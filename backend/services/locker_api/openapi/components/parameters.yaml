@@ -1,0 +1,156 @@
+LockerIdPath:
+  name: lockerId
+  in: path
+  required: true
+  description: Уникальный идентификатор шкафа (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+SensorIdPath:
+  name: sensorId
+  in: path
+  required: true
+  description: Уникальный идентификатор датчика (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "660e8400-e29b-41d4-a716-446655440111"
+
+SensorTypeIdPath:
+  name: typeId
+  in: path
+  required: true
+  description: Уникальный идентификатор типа датчика
+  schema:
+    type: integer
+    format: int32
+    minimum: 1
+  example: 1
+
+ThresholdIdPath:
+  name: thresholdId
+  in: path
+  required: true
+  description: Уникальный идентификатор порогового значения (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "770e8400-e29b-41d4-a716-446655440222"
+
+CommandIdPath:
+  name: commandId
+  in: path
+  required: true
+  description: Уникальный идентификатор команды (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "880e8400-e29b-41d4-a716-446655440333"
+
+ConnectivityQuery:
+  name: connectivity
+  in: query
+  required: false
+  description: Фильтр по состоянию связи
+  schema:
+    type: string
+    enum:
+      - online
+      - offline
+  example: online
+
+DoorQuery:
+  name: door
+  in: query
+  required: false
+  description: Фильтр по состоянию двери
+  schema:
+    type: string
+    enum:
+      - closed
+      - open
+  example: closed
+
+OperationalStatusQuery:
+  name: operational_status
+  in: query
+  required: false
+  description: Фильтр по эксплуатационному статусу
+  schema:
+    type: string
+    enum:
+      - normal
+      - maintenance
+      - alarm
+  example: normal
+
+RemoteUserHeader:
+  name: X-Remote-User
+  in: header
+  required: true
+  description: ID аутентифицированного пользователя
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 1
+
+LimitQuery:
+  name: limit
+  in: query
+  required: false
+  description: Максимальное количество элементов в ответе
+  schema:
+    type: integer
+    default: 100
+    minimum: 1
+    maximum: 1000
+
+OffsetQuery:
+  name: offset
+  in: query
+  required: false
+  description: Смещение для пагинации (0-based)
+  schema:
+    type: integer
+    default: 0
+    minimum: 0
+
+ViewQuery:
+  name: view
+  in: query
+  required: false
+  description: |
+    Режим представления элементов в ответе.
+    `location` — только id и геопозиция (lat/lon/address).
+    По умолчанию возвращается полный объект Locker.
+  schema:
+    type: string
+    enum:
+      - location
+  example: location
+
+SearchQuery:
+  name: q
+  in: query
+  required: false
+  description: |
+    Подстрочный поиск (case-insensitive) по `inventory_number`
+    ИЛИ `location_address` одновременно — один параметр, оба поля.
+    Значение обрезается по краям (`strip`); пустая строка или
+    только пробелы трактуются как отсутствующий параметр и
+    фильтр не применяется.
+    LIKE-метасимволы `%`, `_` и сам экранирующий `\` в значении
+    экранируются и ищутся как литералы (`q=%` найдёт буквальный
+    знак процента, а не «всё»).
+    Применяется через `AND` к остальным фильтрам
+    (`connectivity`, `door`, `operational_status`); `total` в
+    ответе учитывает тот же фильтр, что и `items`.
+    Превышение `maxLength` → `400` с
+    `ProblemDetails`, ссылающимся на поле `q`.
+  schema:
+    type: string
+    maxLength: 100
+  example: "Ленина"

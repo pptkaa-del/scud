@@ -1,0 +1,46 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Мониторинг безопасности</h2>
+            <p class="page-subtitle">Контроль периметра и реагирование на инциденты</p>
+        </div>
+        <div class="header-actions-row">
+            <div class="incidents-filter-group">
+                <button class="incidents-filter-btn active" data-filter="all">Все</button>
+                <button class="incidents-filter-btn" data-filter="new">Новые</button>
+            </div>
+            <div class="security-search-container">
+                <div class="security-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="incidentsSearch" placeholder="Поиск по инвентарному номеру или адресу" autocomplete="off">
+                    <button class="search-clear" id="clearIncidentsSearch">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="search-suggestions" id="searchSuggestions" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <div class="incidents-feed" id="incidentsFeed">
+        <div class="incidents-header">
+            <h3>Инциденты безопасности</h3>
+            <span class="incidents-count" id="incidentsCount">0 инцидентов</span>
+        </div>
+
+        <div class="incidents-grid" id="incidentsGrid">
+            <!-- Инциденты загружаются динамически -->
+        </div>
+
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+                <i class="fas fa-shield-check"></i>
+            </div>
+            <h3>Нет активных инцидентов</h3>
+            <p>Все системы безопасности функционируют нормально</p>
+        </div>
+    </div>
+    <div class="pagination-container" id="paginationContainer" style="display:none;"></div>
+</div>

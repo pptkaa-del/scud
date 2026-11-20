@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ТехПанель</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="/libs/css/all.min.css">
+    <link id="module-style" rel="stylesheet" href="">
+</head>
+<body>
+    <div class="app-container">
+        <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1><i class="fas fa-tools"></i> ТехПанель</h1>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item" data-module="open-lockers">
+                    <i class="fas fa-door-open"></i>
+                    <span>Открытые шкафы</span>
+                </a>
+                <a href="#" class="nav-item" data-module="lockers">
+                    <i class="fas fa-server"></i>
+                    <span>Шкафы управления</span>
+                </a>
+                <a href="#" class="nav-item" data-module="doors">
+                    <i class="fas fa-door-closed"></i>
+                    <span>Двери</span>
+                </a>
+            </nav>
+
+            <div class="profile-block">
+                <div class="profile-main">
+                    <div class="profile-avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="profile-info">
+                        <span class="profile-name"></span>
+                        <span class="profile-role"></span>
+                    </div>
+                </div>
+                <button class="btn-logout" id="logoutBtn">
+                    <i class="fas fa-sign-out-alt"></i> Выйти
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content" id="mainContent">
+            <!-- Контент модуля загружается сюда -->
+        </main>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>

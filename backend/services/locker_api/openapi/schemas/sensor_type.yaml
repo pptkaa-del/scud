@@ -1,0 +1,159 @@
+SensorType:
+  type: object
+  description: Тип датчика в системе (справочник)
+  required:
+    - id
+    - code
+    - name
+    - value_type
+    - created_at
+    - states
+  properties:
+    id:
+      $ref: './common_fields.yaml#/SensorTypeId'
+    code:
+      type: string
+      description: Уникальный код типа датчика
+      example: "temperature"
+    name:
+      type: string
+      description: Человекочитаемое название
+      example: "Температура"
+    description:
+      type: string
+      nullable: true
+      description: Описание типа датчика
+      example: "Датчик температуры окружающей среды"
+    unit:
+      type: string
+      nullable: true
+      description: Единица измерения
+      example: "°C"
+    value_type:
+      $ref: '#/SensorValueType'
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время создания записи
+    states:
+      type: array
+      nullable: true
+      description: |
+        Состояния перечислимого типа (хранятся в `sensor_types.states`, по
+        возрастанию `value`); null — тип не перечислимый. Недопустимы для
+        `value_type: string`; не более 32 элементов, `value` уникальны.
+      items:
+        $ref: '#/SensorStateOption'
+
+SensorStateOption:
+  type: object
+  description: Допустимое значение перечислимого типа датчика и его подпись
+  required: [value, label, severity]
+  properties:
+    value:
+      description: Сырое значение (integer для numeric-типов, boolean для boolean-типов)
+      oneOf:
+        - type: integer
+          example: 1
+        - type: boolean
+          example: true
+    label:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: Подпись (1..100 символов после trim)
+      example: "От сети"
+    severity:
+      $ref: './sensor.yaml#/SensorDisplaySeverity'
+
+SensorValueType:
+  type: string
+  description: Тип значения датчика
+  enum:
+    - numeric
+    - boolean
+    - string
+  example: numeric
+
+SensorTypeCreate:
+  type: object
+  description: Данные для создания нового типа датчика
+  required:
+    - code
+    - name
+    - value_type
+  properties:
+    code:
+      type: string
+      description: Уникальный код типа датчика
+      pattern: '^[a-z_]+$'
+      example: "temperature"
+    name:
+      type: string
+      description: Название типа датчика
+      example: "Температура"
+    description:
+      type: string
+      description: Описание
+      example: "Датчик температуры"
+    unit:
+      type: string
+      description: Единица измерения
+      example: "°C"
+    value_type:
+      $ref: '#/SensorValueType'
+    states:
+      type: array
+      nullable: true
+      description: Состояния перечислимого типа; необязательно
+      items:
+        $ref: '#/SensorStateOption'
+
+SensorTypeUpdate:
+  type: object
+  description: |
+    Данные для обновления типа датчика (code не изменяется). Семантика по
+    наличию ключа: `states` отсутствует — состояния не меняются; `null` —
+    очищаются; массив — заменяет весь список. Если меняется `value_type` без
+    `states`, текущие состояния перепроверяются на новый тип (400 при
+    несовместимости).
+  properties:
+    name:
+      type: string
+      description: Новое название
+      example: "Температура воздуха"
+    description:
+      type: string
+      description: Новое описание
+      example: "Датчик температуры окружающей среды"
+    unit:
+      type: string
+      description: Новая единица измерения
+      example: "°C"
+    value_type:
+      $ref: '#/SensorValueType'
+    states:
+      type: array
+      nullable: true
+      description: Новые состояния (`null` — очистить, массив — заменить целиком)
+      items:
+        $ref: '#/SensorStateOption'
+
+SensorTypeListResponse:
+  type: object
+  description: Справочник типов датчиков с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/SensorType'
+    total:
+      type: integer
+      example: 8
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0

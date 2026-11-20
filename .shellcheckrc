@@ -1,0 +1,5 @@
+# shellcheck config — bash скрипты в backend/scripts/ и emulator/.
+# SC1091: следование `source` директивам отключаем (не все source-файлы в репо).
+
+external-sources=true
+disable=SC1091

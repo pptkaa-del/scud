@@ -1,0 +1,260 @@
+login:
+  post:
+    tags:
+      - Аутентификация
+    summary: Шаг 1 — проверка пароля
+    description: |
+      Проверяет телефон и пароль пользователя.
+
+      **Если `require_2fa=false`** (например, администратор): устанавливает сессионный cookie сразу.
+
+      **Если `require_2fa=true`**: отправляет OTP на номер телефона, возвращает
+      сообщение об отправке. Для установки сессии нужен шаг 2 — `/verify`.
+
+      При неверном телефоне или пароле возвращает `401`.
+
+      Если OTP не удалось доставить ни по SMS, ни через Max-бот (или недоступен
+      сервис доставки / user_api) — `503` с русскоязычным `detail`; код входа
+      при этом не выдаётся.
+
+      Защита от brute force: не более 10 попыток с одного IP за 60 секунд (конфигурируется).
+      При превышении — `429 Too Many Requests`.
+    operationId: login
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/LoginRequest'
+          examples:
+            withPassword:
+              $ref: '../components/examples.yaml#/LoginRequestExample'
+    responses:
+      '200':
+        description: |
+          Учётные данные верны. Возможны два варианта:
+          - `require_2fa=false` → `LoginSuccessResponse` + Set-Cookie (имя, роль, cookie)
+          - `require_2fa=true` → `OtpSentResponse` (OTP отправлен, нужен `/verify`)
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '../schemas/token.yaml#/LoginSuccessResponse'
+                - $ref: '../schemas/token.yaml#/OtpSentResponse'
+            examples:
+              sessionStarted:
+                $ref: '../components/examples.yaml#/AuthSuccessResponseExample'
+              otpSent:
+                $ref: '../components/examples.yaml#/OtpSentResponseExample'
+        headers:
+          Set-Cookie:
+            description: |
+              Устанавливается только при `require_2fa=false`.
+              `HttpOnly; SameSite=Strict; Path=/`
+            schema:
+              type: string
+              example: "access_token=abc123; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '429':
+        $ref: '../components/responses.yaml#/TooManyRequests'
+      '503':
+        $ref: '../components/responses.yaml#/ServiceUnavailable'
+
+verify:
+  post:
+    tags:
+      - Аутентификация
+    summary: Шаг 2 — проверка OTP
+    description: |
+      Проверяет одноразовый код из SMS, отправленного на шаге `/login`.
+
+      При успехе устанавливает сессионный cookie (`access_token`) и возвращает
+      имя и роль пользователя (симметрично `/login` без 2FA).
+      После 3 неверных попыток код блокируется — нужно запросить новый через `/login`.
+    operationId: verify
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/requests.yaml#/VerifyRequest'
+          examples:
+            withCode:
+              $ref: '../components/examples.yaml#/VerifyRequestExample'
+    responses:
+      '200':
+        description: OTP верен — сессия установлена, возвращены имя и роль
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/token.yaml#/LoginSuccessResponse'
+            examples:
+              success:
+                $ref: '../components/examples.yaml#/AuthSuccessResponseExample'
+        headers:
+          Set-Cookie:
+            description: |
+              Сессионный cookie. `HttpOnly; SameSite=Strict; Path=/`
+            schema:
+              type: string
+              example: "access_token=abc123; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '429':
+        $ref: '../components/responses.yaml#/TooManyRequests'
+
+access:
+  post:
+    tags:
+      - Сессия
+    summary: Ротация сессионного cookie
+    description: |
+      Обновляет сессионный cookie: отзывает старый access token, выдаёт новый.
+
+      Полезно для продления сессии до истечения 30-дневного срока.
+      Запрос без cookie вернёт `401`.
+    operationId: accessSession
+    security: []
+    parameters:
+      - in: cookie
+        name: access_token
+        required: true
+        schema:
+          type: string
+        description: Текущий сессионный токен (устанавливается сервером через Set-Cookie)
+    responses:
+      '200':
+        description: Сессия обновлена, новый cookie установлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/token.yaml#/AuthMessageResponse'
+            examples:
+              success:
+                summary: Сессия продлена
+                value:
+                  message: "Session renewed"
+        headers:
+          Set-Cookie:
+            description: Новый сессионный cookie. `HttpOnly; SameSite=Strict; Path=/`
+            schema:
+              type: string
+              example: "access_token=new_abc123; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+
+logout:
+  post:
+    tags:
+      - Аутентификация
+    summary: Выход из системы
+    description: |
+      Отзывает сессию:
+      - Access token помечается как отозванный в БД
+      - Access cookie очищается на клиенте (`Max-Age=0`)
+
+      Cookie опционален. Операция идемпотентна — повторный вызов не возвращает ошибку.
+    operationId: logout
+    security: []
+    parameters:
+      - in: cookie
+        name: access_token
+        required: false
+        schema:
+          type: string
+        description: Сессионный token для отзыва (опционально)
+    responses:
+      '204':
+        description: Выход выполнен, сессия отозвана
+        headers:
+          Set-Cookie:
+            description: Очищает access cookie (`Max-Age=0`)
+            schema:
+              type: string
+              example: "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+
+revokeUserTokens:
+  delete:
+    tags:
+      - Администрирование
+    summary: Отозвать все токены пользователя
+    description: |
+      Отзывает все активные сессии (access tokens) указанного пользователя.
+
+      Доступен только пользователям с ролью `administrator`.
+      Требует активной сессии (cookie `access_token`).
+
+      Полезно при блокировке учётной записи или подозрении на компрометацию.
+    operationId: revokeUserTokens
+    security:
+      - CookieAuth: []
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: integer
+        description: ID пользователя, чьи токены нужно отозвать
+    responses:
+      '200':
+        description: Токены отозваны
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revoked:
+                  type: integer
+                  description: Количество отозванных токенов
+                  example: 3
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        description: Недостаточно прав (не администратор)
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+
+validate:
+  get:
+    tags:
+      - Внутренние эндпоинты
+    summary: Проверка сессии (внутренний)
+    description: |
+      **Внутренний эндпоинт** — вызывается только Apache mod_lua.
+      Недоступен снаружи (`Require all denied` в Apache).
+
+      Принимает access token из заголовка `X-Access-Token` (устанавливается Lua после
+      извлечения из Cookie клиента). Проверяет токен в БД.
+
+      При успехе возвращает `200` с заголовком `X-User-Id`.
+      Apache подставляет `X-User-Id` как `X-Remote-User` в запрос к backend-сервисам.
+    operationId: validateSession
+    parameters:
+      - in: header
+        name: X-Access-Token
+        required: true
+        schema:
+          type: string
+        description: Opaque access token (извлекается Lua из Cookie клиента)
+    responses:
+      '200':
+        description: Сессия валидна
+        headers:
+          X-User-Id:
+            description: ID аутентифицированного пользователя
+            schema:
+              type: string
+              example: "42"
+      '401':
+        description: Токен невалиден, просрочен или отозван

@@ -1,0 +1,76 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Двери</h2>
+        </div>
+        <div class="header-actions-row">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="doorsSearch" placeholder="Поиск по номеру, адресу...">
+                    <button class="search-clear" id="clearDoorsSearch" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <!-- Карта -->
+    <div class="cabinet-map-container">
+        <div class="map-header">
+            <div class="map-title">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Карта размещения дверей</span>
+            </div>
+        </div>
+        <div class="folium-map" id="doors-map"></div>
+    </div>
+
+    <!-- Сетка дверей -->
+    <div class="cabinets-grid" id="doorsGrid"></div>
+
+    <div id="doorsPaginationContainer" class="pagination-container"></div>
+
+    <!-- Пустое состояние -->
+    <div class="empty-state" id="doorsEmptyState">
+        <i class="fas fa-door-closed empty-icon"></i>
+        <h3>Двери не найдены</h3>
+        <p>Измените параметры поиска</p>
+    </div>
+</div>
+
+<!-- Модальное окно быстрого просмотра -->
+<div class="new-modal-overlay" id="doorQuickViewModal">
+    <div class="new-modal">
+        <div class="new-modal-header">
+            <h3><i class="fas fa-door-closed"></i> Дверь</h3>
+            <button class="new-modal-close" id="closeDoorQuickView">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="new-modal-body">
+            <div class="quick-view-content">
+                <div class="info-item">
+                    <div class="info-label">Инвентарный номер</div>
+                    <div class="info-value" id="doorQuickViewInventory">—</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Адрес</div>
+                    <div class="info-value" id="doorQuickViewAddress">—</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Статус связи</div>
+                    <div class="info-value" id="doorQuickViewStatus">—</div>
+                </div>
+                <div class="quick-view-actions">
+                    <button class="btn-primary" id="openDoorBtn">
+                        <i class="fas fa-door-open"></i> Открыть
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

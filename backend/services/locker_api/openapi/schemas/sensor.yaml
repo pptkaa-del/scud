@@ -1,0 +1,168 @@
+Sensor:
+  type: object
+  description: Датчик в шкафу
+  required:
+    - id
+    - locker_id
+    - serial_number
+    - sensor_type_id
+    - code
+    - name
+    - value_type
+    - is_active
+    - created_at
+    - updated_at
+    - display
+  properties:
+    id:
+      $ref: './common_fields.yaml#/SensorId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    serial_number:
+      type: string
+      description: Серийный номер датчика
+      example: "SN123456789"
+    sensor_type_id:
+      allOf:
+        - $ref: './common_fields.yaml#/SensorTypeId'
+        - description: ID типа датчика (FK к sensor_types)
+    code:
+      type: string
+      description: Код типа датчика
+      example: "temperature"
+    name:
+      type: string
+      description: Название типа датчика
+      example: "Температура"
+    unit:
+      type: string
+      nullable: true
+      description: Единица измерения
+      example: "°C"
+    value_type:
+      allOf:
+        - $ref: './sensor_type.yaml#/SensorValueType'
+        - description: Тип значения датчика
+    current_value:
+      nullable: true
+      description: |
+        Текущее значение датчика. Тип зависит от `value_type`:
+        `numeric` → number, `boolean` → bool, `string` → str.
+        Для несвежих/новых датчиков — null. Это сырое значение протокола;
+        для показа — `display`.
+      oneOf:
+        - type: number
+          format: double
+          example: 25.5
+        - type: boolean
+          example: false
+        - type: string
+          example: "open"
+    display:
+      nullable: true
+      allOf:
+        - $ref: '#/SensorDisplay'
+      description: |
+        Подпись `current_value`, вычисляется при каждом чтении из
+        `sensor_types.states` типа датчика. null — у типа нет `states`, клиент
+        показывает `current_value` как есть. Значение вне `states` отдаётся как
+        «Неизвестное значение (N)» с severity `warning`, отсутствие значения —
+        «Нет данных».
+    is_active:
+      type: boolean
+      description: Активен ли датчик
+      example: true
+    metadata:
+      type: object
+      description: Дополнительные метаданные датчика (произвольный JSON)
+      example:
+        calibration_date: "2024-01-01"
+        firmware_version: "1.2.3"
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время создания записи
+    updated_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время последнего обновления
+
+SensorDisplay:
+  type: object
+  description: Готовая к показу подпись значения перечислимого датчика
+  required: [label, severity]
+  properties:
+    label:
+      type: string
+      description: Текст значения для UI
+      example: "От сети"
+    severity:
+      $ref: '#/SensorDisplaySeverity'
+
+SensorDisplaySeverity:
+  type: string
+  description: |
+    Подсветка подписи в UI. Только представление: события и уведомления из
+    неё не порождаются.
+  enum:
+    - normal
+    - warning
+    - alert
+  example: normal
+
+SensorCreate:
+  type: object
+  description: Данные для создания нового датчика
+  required:
+    - serial_number
+    - sensor_type_id
+  properties:
+    serial_number:
+      type: string
+      description: Серийный номер датчика
+      example: "SN123456789"
+    sensor_type_id:
+      $ref: './common_fields.yaml#/SensorTypeId'
+    current_value:
+      nullable: true
+      description: |
+        Начальное значение датчика (опционально). Тип должен соответствовать
+        `sensor_types.value_type`: number / boolean / string.
+      oneOf:
+        - type: number
+          format: double
+          example: 20.0
+        - type: boolean
+          example: false
+        - type: string
+          example: "closed"
+
+SensorActiveStatusUpdate:
+  type: object
+  description: Обновление статуса активности датчика
+  required:
+    - is_active
+  properties:
+    is_active:
+      type: boolean
+      description: Новый статус активности
+      example: false
+
+SensorListResponse:
+  type: object
+  description: Список датчиков шкафа с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Sensor'
+    total:
+      type: integer
+      example: 5
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0

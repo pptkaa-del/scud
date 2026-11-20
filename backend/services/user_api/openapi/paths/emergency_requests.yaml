@@ -1,0 +1,151 @@
+emergency-requests:
+  get:
+    summary: Получить список заявок
+    description: |
+      Возвращает список заявок на экстренное открытие шкафов с фильтрацией и пагинацией.
+      Доступно всем аутентифицированным пользователям. Worker видит только
+      собственные заявки; operator/administrator — все.
+    tags:
+      - Emergency Requests
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/EmergencyRequestStatusQuery'
+      - $ref: '../components/parameters.yaml#/LockerIdQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Успешный ответ со списком заявок
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/emergency_request.yaml#/EmergencyRequestListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+
+  post:
+    summary: Создать заявку на экстренное открытие
+    description: |
+      Создает новую заявку на экстренное открытие указанного шкафа.
+      Автоматически логирует действие создания. Worker может подать заявку
+      только на шкаф, на который у него есть активный Допуск (иначе 403);
+      operator/administrator не ограничены.
+    tags:
+      - Emergency Requests
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/emergency_request.yaml#/CreateEmergencyRequestRequest'
+          example:
+            locker_id: '550e8400-e29b-41d4-a716-446655440000'
+    responses:
+      '201':
+        description: Заявка успешно создана
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/emergency_request.yaml#/EmergencyRequestWithDetails'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../components/responses.yaml#/Forbidden'
+
+emergency-request-by-id:
+  parameters:
+    - $ref: '../components/parameters.yaml#/EmergencyRequestIdPath'
+
+  get:
+    summary: Получить детали заявки
+    description: |
+      Возвращает детальную информацию о заявке, включая данные пользователя.
+      Автоматически логирует просмотр заявки. Worker может читать только
+      собственные заявки; чужая заявка отдаёт 404 (факт существования не
+      раскрывается). Operator/administrator видят все.
+    tags:
+      - Emergency Requests
+    security:
+      - RemoteUser: []
+    responses:
+      '200':
+        description: Успешный ответ с деталями заявки
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/emergency_request.yaml#/EmergencyRequestWithDetails'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  delete:
+    summary: Закрыть заявку
+    description: |
+      Единственный способ закрыть заявку на экстренное открытие — отдельного
+      эндпоинта `POST /emergency-request/{id}/close` нет, закрытие выполняется
+      этим `DELETE`.
+
+      Мягкое закрытие: заявка физически не удаляется, а переводится из статуса
+      `pending` в `closed` (проставляются `closed_at` и `closed_by`). Закрытые
+      заявки остаются доступны для чтения через
+      `GET /emergency-requests?status=closed`. Действие фиксируется в аудит-логе
+      (`action='closed'`).
+
+      Доступно только operator и administrator. Worker не может закрыть заявку
+      даже как её автор (ACM вернёт 403). Операция не идемпотентна: повторный
+      `DELETE` по уже закрытой заявке вернёт 409.
+    tags:
+      - Emergency Requests
+    security:
+      - RemoteUser: []
+    responses:
+      '204':
+        description: Заявка успешно закрыта
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+
+emergency-request-by-id-logs:
+  parameters:
+    - $ref: '../components/parameters.yaml#/EmergencyRequestIdPath'
+
+  get:
+    summary: Получить историю действий с заявкой
+    description: |
+      Возвращает аудит-лог всех действий с заявкой (created, closed, viewed).
+      Записи отсортированы по времени выполнения (новые первыми).
+    tags:
+      - Emergency Requests
+    security:
+      - RemoteUser: []
+    responses:
+      '200':
+        description: Успешный ответ со списком логов
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/response_wrappers.yaml#/EmergencyRequestLogListResponse'
+            examples:
+              default:
+                $ref: '../components/examples.yaml#/EmergencyRequestLogListExample'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'

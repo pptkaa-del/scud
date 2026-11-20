@@ -1,0 +1,7 @@
+RemoteUser:
+  type: apiKey
+  in: header
+  name: X-Remote-User
+  description: |
+    ID пользователя, установленный API Gateway после JWT-аутентификации.
+    Notification API доверяет значению из gateway (trust boundary).

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Авторизация — ЦОДД</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/libs/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <div class="traffic-light">
+                <div class="light red" id="red-light"></div>
+                <div class="light yellow" id="yellow-light"></div>
+                <div class="light green" id="green-light"></div>
+            </div>
+            <div class="light-status" id="light-status"></div>
+        </div>
+
+        <div class="right-panel">
+            <div class="form-header">
+                <h1><i class="fas fa-user-lock"></i> Вход в систему</h1>
+                <p>Введите учётные данные для доступа к панели</p>
+            </div>
+
+            <form id="auth-form">
+                <div class="input-group">
+                    <label for="phone">Телефон</label>
+                    <input type="tel" id="phone" name="phone" placeholder="Введите номер телефона" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="password">Пароль</label>
+                    <input type="password" id="password" name="password" placeholder="Введите пароль" required>
+                    <div class="password-toggle">
+                        <i class="fas fa-eye" id="toggle-password"></i>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-sign-in-alt"></i> Войти
+                </button>
+            </form>
+
+            <div class="message-box" id="message-box"></div>
+
+            <div class="logout-section" id="logout-section" style="display: none;">
+                <div class="welcome-message" id="welcome-message"></div>
+                <button class="logout-btn" id="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Выйти
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно ввода 2FA -->
+    <div class="new-modal-overlay" id="otp-modal">
+        <div class="new-modal">
+            <div class="new-modal-header">
+                <h3><i class="fas fa-shield-alt"></i> Подтверждение входа</h3>
+                <button type="button" class="new-modal-close" id="otp-close-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="new-modal-content">
+                <p class="otp-desc">Введите 6-значный код, отправленный на ваш телефон</p>
+                <div class="otp-inputs">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                    <input type="text" maxlength="1" class="otp-input" inputmode="numeric">
+                </div>
+                <div class="message-box" id="otp-message-box"></div>
+            </div>
+            <div class="new-modal-actions">
+                <button type="button" class="btn-secondary" id="otp-back-btn">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <button type="button" class="btn-primary" id="otp-submit-btn">
+                    <i class="fas fa-check"></i> Подтвердить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

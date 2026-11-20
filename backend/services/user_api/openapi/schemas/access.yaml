@@ -1,0 +1,157 @@
+UserAccess:
+  type: object
+  description: Допуск пользователя к шкафам с детальной информацией
+  required:
+    - id
+    - user_id
+    - start_at
+    - full_access
+    - is_active
+    - created_at
+    - lockers
+    - is_expired
+  properties:
+    id:
+      $ref: './common_fields.yaml#/AccessId'
+    user_id:
+      $ref: './common_fields.yaml#/UserId'
+    start_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    end_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    granted_by:
+      $ref: './common_fields.yaml#/NullableUserId'
+    granted_by_full_name:
+      type: string
+      nullable: true
+      description: ФИО пользователя, предоставившего допуск
+      example: "Петров Петр Петрович"
+    request_id:
+      $ref: './common_fields.yaml#/NullableRequestId'
+    full_access:
+      type: boolean
+      description: |
+        Если true, допуск дает доступ ко всем шкафам в системе.
+        Если false, доступ только к шкафам из списка lockers.
+      example: false
+    is_active:
+      type: boolean
+      description: Активен ли допуск (false означает деактивирован)
+      example: true
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    lockers:
+      type: array
+      items:
+        $ref: './common_fields.yaml#/LockerId'
+      description: |
+        Список ID шкафов, к которым предоставлен доступ.
+        Пустой массив если full_access=true (доступ ко всем).
+    is_expired:
+      type: boolean
+      description: |
+        Истек ли срок действия допуска.
+        true если end_at задано и прошло, false в противном случае.
+      example: false
+
+CreateUserAccessRequest:
+  type: object
+  description: Запрос на создание нового допуска для пользователя
+  required:
+    - start_at
+    - full_access
+  properties:
+    start_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    end_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    request_id:
+      $ref: './common_fields.yaml#/NullableRequestId'
+    full_access:
+      type: boolean
+      description: |
+        Если true, предоставить доступ ко всем шкафам.
+        Если false, доступ только к шкафам из locker_ids.
+      example: false
+    locker_ids:
+      type: array
+      items:
+        $ref: './common_fields.yaml#/LockerId'
+      description: |
+        Список ID шкафов для доступа (обязателен если full_access=false).
+        Игнорируется если full_access=true.
+
+UpdateUserAccessRequest:
+  type: object
+  description: Запрос на обновление допуска (продление срока или изменение списка шкафов)
+  properties:
+    start_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    end_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    locker_ids:
+      type: array
+      items:
+        $ref: './common_fields.yaml#/LockerId'
+      description: |
+        Новый список ID шкафов (только для допусков с full_access=false).
+        Полностью заменяет существующий список.
+
+BatchAccessRequest:
+  type: object
+  description: Запрос на получение допусков нескольких пользователей
+  required:
+    - user_ids
+  properties:
+    user_ids:
+      type: array
+      items:
+        $ref: './common_fields.yaml#/UserId'
+      minItems: 1
+      maxItems: 100
+      description: Список ID пользователей (не более 100)
+      example: [123, 456, 789]
+    include_inactive:
+      type: boolean
+      default: false
+      description: Включать деактивированные допуски в ответ
+
+BatchAccessResponse:
+  type: object
+  description: |
+    Результат батч-запроса допусков.
+    Ключи объекта items — строковые представления user_id.
+    Пользователи без допусков присутствуют с пустым массивом.
+  required:
+    - items
+  properties:
+    items:
+      type: object
+      description: Маппинг user_id (строка) → список допусков
+      additionalProperties:
+        type: array
+        items:
+          $ref: '#/UserAccess'
+
+UserAccessListResponse:
+  type: object
+  description: Список допусков пользователя с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      description: Массив допусков
+      items:
+        $ref: '#/UserAccess'
+    total:
+      type: integer
+      description: Общее количество допусков пользователя (без учёта пагинации)
+      example: 5
+    limit:
+      type: integer
+      description: Максимальное количество записей на странице
+      example: 100
+    offset:
+      type: integer
+      description: Смещение от начала списка
+      example: 0

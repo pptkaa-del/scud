@@ -1,0 +1,271 @@
+# =================================================================
+# Path Parameters
+# =================================================================
+
+LockerIdPath:
+  name: lockerId
+  in: path
+  required: true
+  description: Уникальный идентификатор шкафа (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+SensorIdPath:
+  name: sensorId
+  in: path
+  required: true
+  description: Уникальный идентификатор датчика (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "660e8400-e29b-41d4-a716-446655440111"
+
+EventIdPath:
+  name: eventId
+  in: path
+  required: true
+  description: Уникальный идентификатор события безопасности
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 12345
+
+CommandIdPath:
+  name: commandId
+  in: path
+  required: true
+  description: Уникальный идентификатор команды (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "880e8400-e29b-41d4-a716-446655440333"
+
+# =================================================================
+# Query Parameters - Filtering
+# =================================================================
+
+FromDateQuery:
+  name: from
+  in: query
+  required: false
+  description: |
+    Начало временного диапазона (ISO 8601).
+    Формат: YYYY-MM-DDTHH:MM:SSZ или YYYY-MM-DDTHH:MM:SS+00:00
+  schema:
+    type: string
+    format: date-time
+  example: "2024-01-01T00:00:00Z"
+
+ToDateQuery:
+  name: to
+  in: query
+  required: false
+  description: |
+    Конец временного диапазона (ISO 8601).
+    Формат: YYYY-MM-DDTHH:MM:SSZ или YYYY-MM-DDTHH:MM:SS+00:00
+  schema:
+    type: string
+    format: date-time
+  example: "2024-12-31T23:59:59Z"
+
+LockerIdQuery:
+  name: locker_id
+  in: query
+  required: false
+  description: Фильтр по ID шкафа (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+SensorIdQuery:
+  name: sensor_id
+  in: query
+  required: false
+  description: Фильтр по ID датчика (UUID)
+  schema:
+    type: string
+    format: uuid
+  example: "660e8400-e29b-41d4-a716-446655440111"
+
+SensorTypeCodeQuery:
+  name: sensor_type_code
+  in: query
+  required: false
+  description: Фильтр по коду типа датчика
+  schema:
+    type: string
+  examples:
+    temperature:
+      value: "temperature"
+      summary: Датчик температуры
+    humidity:
+      value: "humidity"
+      summary: Датчик влажности
+    door:
+      value: "door"
+      summary: Датчик двери
+
+UserIdQuery:
+  name: user_id
+  in: query
+  required: false
+  description: Фильтр по ID пользователя
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 123
+
+EventTypeQuery:
+  name: event_type
+  in: query
+  required: false
+  description: Фильтр по типу события безопасности
+  schema:
+    type: string
+    enum:
+      - threshold_violation
+      - intrusion
+      - offline
+      - door_tamper
+      - command_2fa_issued
+      - command_2fa_verified
+      - command_2fa_failed
+      - command_2fa_mismatch
+      - command_late_execution
+  example: "threshold_violation"
+
+SeverityQuery:
+  name: severity
+  in: query
+  required: false
+  description: Фильтр по уровню критичности события
+  schema:
+    type: string
+    enum:
+      - low
+      - medium
+      - high
+      - critical
+  example: "high"
+
+ResolvedQuery:
+  name: resolved
+  in: query
+  required: false
+  description: Фильтр по статусу разрешения события (true - закрыто, false - открыто)
+  schema:
+    type: boolean
+  example: false
+
+CommandStatusQuery:
+  name: status
+  in: query
+  required: false
+  description: Фильтр по статусу команды
+  schema:
+    type: string
+    enum:
+      - pending
+      - sent
+      - delivered
+      - executed
+      - failed
+  example: "executed"
+
+CommandTypeQuery:
+  name: command_type
+  in: query
+  required: false
+  description: Фильтр по типу команды
+  schema:
+    type: string
+    enum:
+      - open
+      - close
+      - reboot
+      - config
+      - relay_on
+      - relay_off
+      - relay_restart
+  example: "open"
+
+# =================================================================
+# Query Parameters - Analytics
+# =================================================================
+
+AggregationTypeQuery:
+  name: aggregation_type
+  in: query
+  required: false
+  description: Тип временной агрегации
+  schema:
+    type: string
+    enum:
+      - hourly
+      - daily
+      - monthly
+    default: hourly
+  example: "daily"
+
+MetricQuery:
+  name: metric
+  in: query
+  required: false
+  description: Метрика для аналитики
+  schema:
+    type: string
+    enum:
+      - avg
+      - min
+      - max
+      - sum
+      - stddev
+    default: avg
+  example: "avg"
+
+# =================================================================
+# Query Parameters - Pagination
+# =================================================================
+
+LimitQuery:
+  name: limit
+  in: query
+  required: false
+  description: Максимальное количество элементов в ответе
+  schema:
+    type: integer
+    default: 1000
+    minimum: 1
+    maximum: 10000
+  example: 100
+
+OffsetQuery:
+  name: offset
+  in: query
+  required: false
+  description: Смещение для пагинации (0-based)
+  schema:
+    type: integer
+    default: 0
+    minimum: 0
+  example: 0
+
+# =================================================================
+# Header Parameters
+# =================================================================
+
+RemoteUserHeader:
+  name: X-Remote-User
+  in: header
+  required: false
+  description: ID аутентифицированного пользователя (опционально для некоторых эндпоинтов)
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 1

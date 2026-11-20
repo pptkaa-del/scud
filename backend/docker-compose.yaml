@@ -1,0 +1,1856 @@
+# ScudDocs Backend - Docker Compose
+# Микросервисная архитектура с общими компонентами
+
+# Logging rotation anchor — ограничиваем рост json-file логов
+# (defaults: unlimited size). 10M × 5 файлов = 50M на сервис,
+# защита от OOM Docker host. Применяется ко всем production-сервисам;
+# *_tests короткоживущие — пропускаем.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  # MQTT-брокер (Mosquitto 2.0.23) для relay-интеграции
+  mqtt:
+    build:
+      context: ./mqtt
+      dockerfile: Dockerfile
+      target: production
+    image: scud-mqtt:dev
+    container_name: scud_mqtt
+    ports:
+      # Bind to loopback by default: the backend reaches the broker over
+      # backend_net by service name (mqtt:1883), NOT via this published host
+      # port. Publishing on 0.0.0.0 made the broker reachable off-host
+      # (INF-01/SEC-04); 127.0.0.1 keeps it available for local debugging
+      # without exposing it on the LAN. MQTT_BIND_ADDR is overridden to 0.0.0.0
+      # only in .env.fast, where the system-e2e harness reaches the broker from
+      # a separate compose project via host-gateway, not host loopback.
+      - "${MQTT_BIND_ADDR:-127.0.0.1}:1883:1883"
+    environment:
+      # scud_backend credential source (Docker secret → env → dev fallback).
+      # entrypoint.sh writes the passwordfile from this on every start.
+      - MQTT_USER=scud_backend
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-scud_backend_dev_password}
+    volumes:
+      # Writable shared config so locker_api provisioning can append relay-{id}
+      # users/ACL; the in-container watcher hashes + SIGHUPs mosquitto to reload.
+      - mqtt_config:/mosquitto/config
+    networks:
+      - backend_net
+    restart: unless-stopped
+    logging: *default-logging
+    secrets:
+      - mqtt_password
+    # Modest limits for a broker: the custom mosquitto build carries no TLS /
+    # websockets / cJSON and only relays small JSON control messages, so it sits
+    # at the lightest tier used elsewhere in this file (256M / 0.25 CPU).
+    mem_limit: 256m
+    cpus: 0.25
+    deploy: &deploy-256
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+    healthcheck:
+      # Read-only TCP probe on the listener (does NOT mutate the password file).
+      # Uses the Python interpreter baked into the base image rather than a bash
+      # /dev/tcp redirect: this image's /bin/sh is dash, where /dev/tcp does not
+      # exist and the old probe silently failed. The custom mosquitto build ships
+      # no mosquitto_sub/_pub clients, so Python is the guaranteed-present tool.
+      test: ["CMD", "python3", "-c", "import socket,sys; s=socket.create_connection(('127.0.0.1',1883),2); s.close()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+
+  # TLS-терминация MQTT. Брокер собран WITH_TLS=no (libssl-dev нет в
+  # сертифицированном Astra main), поэтому :8883 ssl держит haproxy-sidecar,
+  # а внутрь backend_net идёт plaintext mqtt:1883.
+  # Профиль mqtt-tls: обычный `docker compose up` его НЕ поднимает — без
+  # выпущенного certs/server.pem haproxy уходит в crash-loop и ломает
+  # `up --wait` в system-e2e.
+  mqtt_tls:
+    profiles: [mqtt-tls]
+    build:
+      context: ./mqtt-tls
+      dockerfile: Dockerfile
+      target: production
+    image: scud-mqtt-tls:dev
+    container_name: scud_mqtt_tls
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    ports:
+      - "${MQTT_TLS_BIND_ADDR:-127.0.0.1}:8883:8883"
+    volumes:
+      # host-путь, а не named volume: `docker compose down -v` не должен уносить
+      # приватный ключ, ротация делается openssl'ом на хосте.
+      - ${MQTT_TLS_CERT_DIR:-./mqtt-tls/certs}:/etc/haproxy/certs:ro
+    networks:
+      - backend_net
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.25
+    deploy: *deploy-256
+    healthcheck:
+      # Полный TLS-хендшейк без данных: `tcp-request content reject` не пускает
+      # пробу к брокеру, лог mosquitto остаётся чистым.
+      test: ["CMD", "python3", "-c", "import socket,ssl; c=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); c.check_hostname=False; c.verify_mode=ssl.CERT_NONE; c.wrap_socket(socket.create_connection(('127.0.0.1',8883),3)).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+  # База данных PostgreSQL для User API
+  postgres_user:
+    image: &pg-image registry.astralinux.ru/library/astra/ubi18-postgresql15:1.8.5
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+      - ./init-scripts/init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
+      - ./services/user_api/app/user_data/db/migrations/:/migrations/:ro
+    networks: &backend-net
+      - backend_net
+    environment:
+      - POSTGRES_USER=admin
+      # POSTGRES_PASSWORD_FILE — пароль читается из docker-secret файла.
+      # Postgres image (file_env) ОТКАЗЫВАЕТСЯ запускаться если выставлены
+      # одновременно POSTGRES_PASSWORD и POSTGRES_PASSWORD_FILE («mutually
+      # exclusive»), поэтому env-варианта здесь больше нет — secret-файл
+      # обязан существовать. Файл `backend/secrets/postgres_user_password`
+      # создаётся один раз при первом deploy (см. DEPLOYMENT.md →
+      # "First-time deployment"); для dev можно положить плейн `password`
+      # (содержимое файла = пароль).
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_user_password
+      - POSTGRES_DB=scud_users
+    # postgres_user дополнительно получает acm_db_password: init-user-db.sh
+    # читает его из /run/secrets/acm_db_password и создаёт роль acm_ro (SEC-24).
+    # SEC-24-wide: каждый postgres-инстанс монтирует только СВОЙ admin-секрет
+    # (postgres_<svc>_password) — общего postgres_password больше нет.
+    secrets:
+      - postgres_user_password
+      - acm_db_password
+    restart: unless-stopped
+    # production resource limits — защита от OOM-cascade при пиковой
+    # нагрузке (1000 шкафов). compose v2.20+ применяет deploy.resources.limits
+    # без Swarm; mem_limit/cpus продублированы для совместимости с runtimes,
+    # которые игнорируют deploy.* без Swarm.
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: &deploy-512
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging: *default-logging
+    healthcheck:
+      # start_period (см. анкор &hc-pg) даёт фору на initdb + миграции
+      # 001_init.sql на свежем volume (на slow CI runner это 20-30s). Без него
+      # 5 retries × 10s начинают тикать сразу — postgres ещё в initdb →
+      # unhealthy → cascade-отказ всех зависимых сервисов.
+      <<: &hc-pg
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_users"]
+
+  # База данных PostgreSQL для Locker API
+  postgres_locker:
+    image: *pg-image
+    volumes:
+      - postgres_locker_data:/var/lib/postgresql/data
+      - ./init-scripts/init-locker-db.sh:/docker-entrypoint-initdb.d/init-locker-db.sh:ro
+      - ./services/locker_api/app/locker_data/db/migrations/:/migrations/:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      # см. POSTGRES_PASSWORD_FILE в postgres_user.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_locker_password
+      - POSTGRES_DB=scud_lockers
+    secrets:
+      - postgres_locker_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_lockers"]
+
+  # Redis - общий кэш (используется ACM + user_api для invalidation hook).
+  # `--requirepass` обязателен: без него любой контейнер в backend_net
+  # получал бы доступ к ACM-кэшу с ролями всех активных пользователей.
+  redis:
+    image: registry.astralinux.ru/library/astra/ubi18-redis7015:1.8.5
+    networks:
+      - backend_net
+    command: ["redis-server", "--bind", "0.0.0.0", "--requirepass", "${REDIS_PASSWORD:-redis-dev-only-do-not-use-in-prod}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis-dev-only-do-not-use-in-prod}
+    volumes:
+      - redis_data:/var/lib/redis
+    restart: unless-stopped
+    # Redis — небольшой кэш ACM, 256M запас.
+    mem_limit: 256m
+    cpus: 0.25
+    deploy: *deploy-256
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # PgBouncer — транзакционный пулинг соединений (по одному пулеру на инстанс).
+  # Кап числа коннектов к postgres при горизонтальном масштабировании сервисов:
+  # pool_mode=transaction мультиплексирует короткие транзакции на фикс-пул
+  # серверных соединений. Безопасность transaction-режима держится на инварианте
+  # «один execute = одна транзакция = один checkout» (см. backend/pgbouncer/README.md
+  # и backend/CONVENTIONS.md). SEC-24 blast-radius сохранён: каждый пулер монтирует
+  # ТОЛЬКО секрет своего инстанса (user-пулер — ещё acm_db_password, т.к. ACM
+  # ходит в scud_users под ролью acm_ro). Общий anchor для лимитов/healthcheck.
+  pgbouncer_user:
+    build: &pgb-build
+      context: ./pgbouncer
+      dockerfile: Dockerfile
+      target: production
+    depends_on:
+      postgres_user:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_user
+      - PGB_DB_NAME=scud_users
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_user_password
+      # user-пулер ОБЯЗАН знать вторую роль: ACM ходит в scud_users под
+      # least-privilege ролью acm_ro (SEC-24), а не под admin.
+      - PGB_EXTRA_USER=acm_ro
+      - PGB_EXTRA_PASSWORD_SECRET=acm_db_password
+      - ACM_DB_PASSWORD=${ACM_DB_PASSWORD:-acm_ro_dev_password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_USER:-15}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_user_password
+      - acm_db_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: &pgb-mem 256m
+    cpus: &pgb-cpus 0.25
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: &pgb-healthcheck
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  pgbouncer_locker:
+    build: *pgb-build
+    depends_on:
+      postgres_locker:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_locker
+      - PGB_DB_NAME=scud_lockers
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_locker_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      # hot-инстанс (1000+ реле по MQTT, телеметрия) — пул крупнее.
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_LOCKER:-30}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_locker_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: *pgb-mem
+    cpus: *pgb-cpus
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: *pgb-healthcheck
+
+  pgbouncer_history:
+    build: *pgb-build
+    depends_on:
+      postgres_history:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_history
+      - PGB_DB_NAME=scud_history
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_history_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      # hot-инстанс (батч-инсёрты телеметрии) — пул крупнее.
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_HISTORY:-25}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_history_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: *pgb-mem
+    cpus: *pgb-cpus
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: *pgb-healthcheck
+
+  pgbouncer_auth:
+    build: *pgb-build
+    depends_on:
+      postgres_auth:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_auth
+      - PGB_DB_NAME=scud_auth
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_auth_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_AUTH:-10}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_auth_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: *pgb-mem
+    cpus: *pgb-cpus
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: *pgb-healthcheck
+
+  pgbouncer_notification:
+    build: *pgb-build
+    depends_on:
+      postgres_notification:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_notification
+      - PGB_DB_NAME=scud_notifications
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_notification_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_NOTIFICATION:-10}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_notification_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: *pgb-mem
+    cpus: *pgb-cpus
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: *pgb-healthcheck
+
+  pgbouncer_reports:
+    build: *pgb-build
+    depends_on:
+      postgres_reports:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - PGB_DB_HOST=postgres_reports
+      - PGB_DB_NAME=scud_reports
+      - PGB_DB_USER=admin
+      - PGB_DB_PASSWORD_SECRET=postgres_reports_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - PGB_DEFAULT_POOL_SIZE=${PGB_DEFAULT_POOL_SIZE_REPORTS:-10}
+      - PGB_RESERVE_POOL_SIZE=${PGB_RESERVE_POOL_SIZE:-5}
+      - PGB_MAX_CLIENT_CONN=${PGB_MAX_CLIENT_CONN:-200}
+      - PGB_ADMIN_PASSWORD_SECRET=pgb_admin_password
+    secrets:
+      - postgres_reports_password
+      - pgb_admin_password
+    restart: unless-stopped
+    mem_limit: *pgb-mem
+    cpus: *pgb-cpus
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck: *pgb-healthcheck
+
+  # User API - Подсистема 3: Работа с пользователями
+  user_api:
+    build:
+      context: .
+      dockerfile: services/user_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_user:6432.
+      # postgres_user остаётся в графе зависимостей транзитивно (пулер ждёт его
+      # healthy), но сервис теперь зависит от пулера, а не от postgres напрямую.
+      pgbouncer_user:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=user_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_user
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_users
+      # connection pool sizing (low QPS → дефолт 5/1, см. .env.example).
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS:-5}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS:-5}
+      - APP_PORT=8000
+      - ADMIN_PHONE=${ADMIN_PHONE:-+79000000000}
+      - ADMIN_FULL_NAME=Администратор
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD:-redis-dev-only-do-not-use-in-prod}@redis:6379/0}
+      # Общий с auth_api ключ HMAC для подписи /internal/auth/check.
+      # ОБЯЗАН совпадать со значением в auth_api. См. .env.example.
+      - INTERNAL_AUTH_HMAC_KEY=${INTERNAL_AUTH_HMAC_KEY:-internal-auth-dev-key-do-not-use-in-prod}
+      # Ключ для подписи /internal/user/by-invite от notification_api'шного
+      # MaxBotPoller. ОБЯЗАН совпадать со значением в notification_api.
+      - INTERNAL_MAX_BINDING_HMAC_KEY=${INTERNAL_MAX_BINDING_HMAC_KEY:-internal-max-binding-dev-key-do-not-use-in-prod}
+      # Ключ для подписи /internal/user/{id}/max-context от auth_api.
+      # ОБЯЗАН совпадать со значением в auth_api (см. step-up 2FA для команд).
+      - INTERNAL_STEP_UP_HMAC_KEY=${INTERNAL_STEP_UP_HMAC_KEY:-internal-step-up-dev-key-do-not-use-in-prod}
+      # Ключ для проверки подписи PII-read запросов (by-phone, by-id, names)
+      # от auth_api и reports_api. ОБЯЗАН совпадать в трёх сервисах (SEC-10).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+      # auth_api: user_api отзывает сессии после смены пароля / 2FA (SEC-14).
+      - AUTH_API_URL=http://auth_api:8003
+      # Ключ для подписи /internal/api/v1/sessions/revoke в auth_api. ОБЯЗАН
+      # совпадать со значением в auth_api (SEC-14).
+      - INTERNAL_SESSION_REVOKE_HMAC_KEY=${INTERNAL_SESSION_REVOKE_HMAC_KEY:-internal-session-revoke-dev-key-do-not-use-in-prod}
+      # Username Max-бота для генерации invite-ссылок при создании пользователя.
+      # Пусто -> POST /api/v1/users вернёт max_invite_link=null, ссылку соберёт фронт.
+      - MAX_BOT_USERNAME=${MAX_BOT_USERNAME:-}
+    restart: unless-stopped
+    # 1G/1.0 — обычный backend сервис.
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: &deploy-1g
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    # Docker secrets file-mount. read_secret() читает /run/secrets/*
+    # с fallback на env-переменные. Тест-контейнеры (user_api_tests) не
+    # монтируют secrets — у них работает env-fallback path.
+    secrets:
+      - postgres_user_password
+      - redis_password
+      - admin_password
+      - internal_auth_hmac_key
+      - internal_max_binding_hmac_key
+      - internal_user_read_hmac_key
+      - internal_session_revoke_hmac_key
+      - internal_step_up_hmac_key
+    logging: *default-logging
+    healthcheck:
+      <<: &hc-http
+        interval: 30s
+        timeout: 5s
+        retries: 3
+        start_period: 10s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+
+  # User API Tests
+  user_api_tests:
+    profiles: &tests-profiles [tests]
+    build:
+      context: .
+      dockerfile: services/user_api/Dockerfile
+      # target=test добавляет python3-coverage + pytest-cov поверх production
+      # (Astra extended-repository; не попадает в production target).
+      target: test
+    # condition: service_healthy — pytest стартует только когда /health
+    # вернул 200; иначе тесты упираются в TEST_API_TIMEOUT при cold-start.
+    depends_on:
+      user_api:
+        condition: service_healthy
+      # PgBouncer-пулинг тест (test_pgbouncer_pooling.py) подключается к пулеру
+      # напрямую — ждём его healthy. Сидирование данных по-прежнему идёт в
+      # postgres_user напрямую (raw psycopg2 conftest), а app-through-pgbouncer
+      # путь покрыт живым user_api, который ходит через pgbouncer_user.
+      pgbouncer_user:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://user_api:8000
+      - TEST_API_TIMEOUT=120
+      # Сидирование (conftest) — НАПРЯМУЮ в postgres_user (test-seeders bypass
+      # pgbouncer): raw psycopg2 conftest без пулинга.
+      - DB_HOST=postgres_user
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_users
+      # Пулер для test_pgbouncer_pooling.py: проверяем round-trip и кап коннектов
+      # через pgbouncer_user:6432 (transaction-режим + ignore_startup_parameters).
+      - PGBOUNCER_HOST=pgbouncer_user
+      - PGBOUNCER_PORT=6432
+      - PGB_DEFAULT_POOL_SIZE_USER=${PGB_DEFAULT_POOL_SIZE_USER:-15}
+      # Тот же ключ, что и в user_api — integration-тесты должны подписывать
+      # прямые запросы к /internal/auth/check (см. tests/integration/conftest).
+      - INTERNAL_AUTH_HMAC_KEY=${INTERNAL_AUTH_HMAC_KEY:-internal-auth-dev-key-do-not-use-in-prod}
+      # Тот же ключ, что и в user_api — integration-тест /internal/users/names
+      # подписывает прямые запросы этим HMAC (см. test_internal_user_names).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+      # Тот же ключ, что и в user_api — live user_api после смены пароля / 2FA
+      # подписывает исходящий /internal/api/v1/sessions/revoke этим HMAC (SEC-14).
+      - INTERNAL_SESSION_REVOKE_HMAC_KEY=${INTERNAL_SESSION_REVOKE_HMAC_KEY:-internal-session-revoke-dev-key-do-not-use-in-prod}
+      # pytest-cov / coverage берут [tool.coverage.*] из корневого pyproject.toml,
+      # смонтированного в /coverage-config (см. volumes ниже).
+      # COVERAGE_RCFILE → backend/.coveragerc (только [run]+[report] — [paths]
+      # сознательно отсутствует, иначе pytest-cov применил бы mapping в
+      # cwd=/app/<svc> контейнера → path-injection). Нормализация путей
+      # делается на CI runner: `coverage combine --rcfile=pyproject.toml`
+      # читает [tool.coverage.paths] из корневого pyproject.toml. `--cov`
+      # без аргументов читает `source` из rcfile; `--cov-report=` подавляет
+      # отчёты внутри контейнера — отчёт строится только в coverage-combine job.
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.user_api
+    volumes:
+      - &coverage-config-mount ./.coveragerc:/coverage-config/coveragerc:ro
+      - ./.coverage-data/user_api:/coverage:rw
+    entrypoint: &pytest-entry pytest --cov --cov-report= -vv tests
+
+  # Locker API - Подсистема 4: Контроль и управление шкафами
+  locker_api:
+    build:
+      context: .
+      dockerfile: services/locker_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_locker:6432.
+      pgbouncer_locker:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=locker_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_locker
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_lockers
+      # connection pool sizing — locker_api hot-path (1000+ MQTT relays, telemetry).
+      # Distinct env-имя (DB_MAX_WORKERS_LOCKER), чтобы глобальный
+      # DB_MAX_WORKERS=5 в .env не приземлил pool. См. .env.example.
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS_LOCKER:-20}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS_LOCKER:-20}
+      - APP_PORT=8001
+      - NOTIFICATION_API_URL=http://notification_api:8005
+      # history_api нужен для публикации command_2fa_mismatch security event.
+      # Producer глушит сетевые ошибки — hard depends_on не требуется.
+      - HISTORY_API_URL=http://history_api:8002
+      # auth_api используется для step-up issue/verify при require_2fa=true
+      # на привилегированных командах (open/reboot/config).
+      - AUTH_API_URL=http://auth_api:8003
+      - STEP_UP_ISSUE_TIMEOUT_SECONDS=${STEP_UP_ISSUE_TIMEOUT_SECONDS:-50}
+      # Общий с auth_api и user_api ключ HMAC. Подписывает исходящие
+      # /internal/api/v1/step-up/{issue,verify}. ОБЯЗАН совпадать в трёх сервисах.
+      - INTERNAL_STEP_UP_HMAC_KEY=${INTERNAL_STEP_UP_HMAC_KEY:-internal-step-up-dev-key-do-not-use-in-prod}
+      # Общий с history_api ключ HMAC. Подписывает исходящие POST на
+      # /internal/api/v1/{events/security,telemetry,media} из OutboundDispatcher
+      # и StepUpEventProducer (SEC-05). ОБЯЗАН совпадать с history_api.
+      - INTERNAL_HISTORY_HMAC_KEY=${INTERNAL_HISTORY_HMAC_KEY:-internal-history-dev-key-do-not-use-in-prod}
+      # Periodic intervals (production defaults; override via .env.fast for E2E)
+      - STATE_MONITOR_CHECK_INTERVAL_S=${STATE_MONITOR_CHECK_INTERVAL_S:-60}
+      - COMMAND_QUEUE_PROCESSOR_INTERVAL_S=${COMMAND_QUEUE_PROCESSOR_INTERVAL_S:-5}
+      - COMMAND_ACK_TIMEOUT_LOOP_INTERVAL_S=${COMMAND_ACK_TIMEOUT_LOOP_INTERVAL_S:-60}
+      - COMMAND_ACK_TIMEOUT_MINUTES=${COMMAND_ACK_TIMEOUT_MINUTES:-5}
+      - COMMAND_TTL_S=${COMMAND_TTL_S:-60}
+      - OUTBOUND_DISPATCHER_POLL_INTERVAL_S=${OUTBOUND_DISPATCHER_POLL_INTERVAL_S:-2}
+      # TTL кэша operational_status на hot path mqtt-ingest (_op_status,
+      # ingest.py). Дефолт в коде — 30s (баланс «не дёргать БД на каждый
+      # батч телеметрии» vs «реактивная реакция на смену MAINTENANCE из
+      # REST»); fast-mode (.env.fast) понижает до 1s — иначе
+      # test_telemetry_suppressed_in_maintenance ловит race (maintenance уже
+      # в БД, но кэш ещё держит `normal`), а выход из maintenance
+      # (test_maintenance_to_normal_transition) не подхватывается вовремя.
+      - RELAY_OP_STATUS_TTL_S=${RELAY_OP_STATUS_TTL_S:-30}
+      # --- MQTT релейный транспорт (Plan 2) ---
+      # Подписка на shared stat/rep/photos, публикация com/{relay_id}.
+      - MQTT_HOST=mqtt
+      - MQTT_PORT=1883
+      - MQTT_USER=scud_backend
+      # Пароль брокера: Docker secret mqtt_password (read_secret) → env →
+      # dev-fallback. Литерал больше не коммитится (INF-01). Env здесь — fallback
+      # для dev без seed-секретов; в prod значение берётся из secret-файла.
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-scud_backend_dev_password}
+      # Шкаф уходит offline, если stat не приходил дольше N секунд (протокол §5–6).
+      # Дефолт prod=350s; в fast-mode E2E (.env.fast) понижено, иначе тест offline
+      # не дожидается флипа за свой бюджет ожидания.
+      - MQTT_OFFLINE_TIMEOUT_S=${MQTT_OFFLINE_TIMEOUT_S:-350}
+      # Период фоновой проверки last_seen_at. Дефолт 30s; fast-mode понижает.
+      - MQTT_OFFLINE_CHECK_INTERVAL_S=${MQTT_OFFLINE_CHECK_INTERVAL_S:-30}
+      # Каталог конфигурации брокера (shared volume): provisioning дописывает
+      # passwordfile/aclfile для relay-{id}; брокер перечитывает по SIGHUP.
+      - MQTT_CONFIG_DIR=/mosquitto/config
+      # --- MQTT ingest bulkhead (устойчивость к штормам реле) ---
+      # Максимальное число одновременно выполняемых handle_message (семафор).
+      # Держите ≤ DB_MAX_WORKERS_LOCKER минус headroom (~4) для /health и команд.
+      - MQTT_INGEST_MAX_CONCURRENCY=${MQTT_INGEST_MAX_CONCURRENCY:-10}
+      # Суммарный лимит in-flight + ожидающих задач ingest. Превышение →
+      # telemetry/stat отбрасываются (rep exempt); счётчик outcome=dropped_overload.
+      - MQTT_INGEST_MAX_PENDING=${MQTT_INGEST_MAX_PENDING:-1000}
+      # Отдельная полоса для кадров photos. MQTT_INGEST_MAX_CONCURRENCY +
+      # MQTT_INGEST_PHOTO_MAX_CONCURRENCY ≤ DB_MAX_WORKERS_LOCKER − 4.
+      - MQTT_INGEST_PHOTO_MAX_CONCURRENCY=${MQTT_INGEST_PHOTO_MAX_CONCURRENCY:-2}
+      # Бюджет байт ожидающих кадров photos; сверх него — dropped_overload.
+      # Не меньше MAX_MEDIA_TRANSFER_BYTES + 20.
+      - MQTT_INGEST_PHOTO_MAX_PENDING_BYTES=${MQTT_INGEST_PHOTO_MAX_PENDING_BYTES:-268435456}
+      # Серия фото: эпоха event_id, лимит новых серий per relay, ретеншен реестра.
+      - RELAY_PHOTO_SERIES_EPOCH_S=${RELAY_PHOTO_SERIES_EPOCH_S:-86400}
+      - RELAY_PHOTO_SERIES_MAX_BYTES=${RELAY_PHOTO_SERIES_MAX_BYTES:-10485760}
+      - RELAY_PHOTO_MAINTENANCE_INTERVAL_S=${RELAY_PHOTO_MAINTENANCE_INTERVAL_S:-60}
+      - RELAY_PHOTO_SERIES_RATE=${RELAY_PHOTO_SERIES_RATE:-0.1}
+      - RELAY_PHOTO_SERIES_BURST=${RELAY_PHOTO_SERIES_BURST:-10}
+      - RELAY_PHOTO_SERIES_RETENTION_DAYS=${RELAY_PHOTO_SERIES_RETENTION_DAYS:-90}
+      # Число параллельных доставок outbox→history_api в OutboundDispatcher.
+      - OUTBOUND_DISPATCHER_CONCURRENCY=${OUTBOUND_DISPATCHER_CONCURRENCY:-6}
+    volumes:
+      # Shared с брокером том конфигурации для provisioning broker-кредов relay-{id}.
+      - mqtt_config:/mosquitto/config
+    restart: unless-stopped
+    # locker_api держит реестр команд и состояние 1000 реле, обменивающихся
+    # с ним через MQTT-брокер, отсюда 2G/2.0 — вдвое больше обычных сервисов.
+    mem_limit: 2g
+    cpus: 2.0
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    secrets:
+      - postgres_locker_password
+      - internal_step_up_hmac_key
+      - internal_history_hmac_key
+      - mqtt_password
+    logging: *default-logging
+    # 10s default → SIGKILL до того как ingest-bulkhead и OutboundDispatcher
+    # успеют корректно дослать/сохранить состояние по 1000 MQTT-реле.
+    # 30s даёт graceful path время на это.
+    stop_grace_period: 30s
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health || exit 1"]
+
+  # Locker API Tests
+  locker_api_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/locker_api/Dockerfile
+      target: test
+    depends_on:
+      locker_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://locker_api:8001
+      - TEST_API_TIMEOUT=120
+      - DB_HOST=postgres_locker
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_lockers
+      # Relay-integration tests (test_relay_mqtt_flow.py) подключаются к брокеру
+      # напрямую — пароль должен совпадать с тем, что брокер пишет из секрета/env.
+      - MQTT_HOST=mqtt
+      - MQTT_PORT=1883
+      - MQTT_USER=scud_backend
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-scud_backend_dev_password}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.locker_api
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/locker_api:/coverage:rw
+    entrypoint: *pytest-entry
+
+  # База данных PostgreSQL для History API
+  postgres_history:
+    image: *pg-image
+    volumes:
+      - postgres_history_data:/var/lib/postgresql/data
+      - ./init-scripts/init-history-db.sh:/docker-entrypoint-initdb.d/init-history-db.sh:ro
+      - ./services/history_api/app/history_data/db/migrations/:/migrations/:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      # см. POSTGRES_PASSWORD_FILE в postgres_user.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_history_password
+      - POSTGRES_DB=scud_history
+    secrets:
+      - postgres_history_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_history"]
+
+  # History API - Подсистема 5: Хранение исторических данных
+  history_api:
+    build:
+      context: .
+      dockerfile: services/history_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_history:6432.
+      pgbouncer_history:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=history_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_history
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_history
+      # connection pool sizing — history_api hot-path (telemetry inserts).
+      # Distinct env-имя (DB_MAX_WORKERS_HISTORY) — см. .env.example.
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS_HISTORY:-10}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS_HISTORY:-10}
+      - APP_PORT=8002
+      # Общий с locker_api и auth_api ключ HMAC. Проверяет подпись на
+      # internal write-эндпойнтах /internal/api/v1/{events/security,telemetry,
+      # media} (SEC-05). ОБЯЗАН совпадать с продьюсерами. См. .env.example.
+      - INTERNAL_HISTORY_HMAC_KEY=${INTERNAL_HISTORY_HMAC_KEY:-internal-history-dev-key-do-not-use-in-prod}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: *deploy-1g
+    secrets:
+      - postgres_history_password
+      - internal_history_hmac_key
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/health || exit 1"]
+
+  # History API Tests
+  history_api_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/history_api/Dockerfile
+      target: test
+    depends_on:
+      history_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://history_api:8002
+      - TEST_API_TIMEOUT=120
+      - DB_HOST=postgres_history
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_history
+      # Тот же ключ, что у history_api: интеграционные тесты подписывают
+      # POST на internal-эндпойнты этим значением (SEC-05).
+      - INTERNAL_HISTORY_HMAC_KEY=${INTERNAL_HISTORY_HMAC_KEY:-internal-history-dev-key-do-not-use-in-prod}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.history_api
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/history_api:/coverage:rw
+    entrypoint: *pytest-entry
+
+  # База данных PostgreSQL для Auth API
+  postgres_auth:
+    image: *pg-image
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+      - ./init-scripts/init-auth-db.sh:/docker-entrypoint-initdb.d/init-auth-db.sh:ro
+      - ./services/auth_api/app/auth_data/db/migrations/:/migrations/:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      # см. POSTGRES_PASSWORD_FILE в postgres_user.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_auth_password
+      - POSTGRES_DB=scud_auth
+    secrets:
+      - postgres_auth_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_auth"]
+
+  # Auth API - Подсистема авторизации (OTP, access tokens)
+  auth_api:
+    build:
+      context: .
+      dockerfile: services/auth_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_auth:6432.
+      pgbouncer_auth:
+        condition: service_healthy
+      # service_healthy (не service_started): auth_api на старте дёргает
+      # user_api /internal/auth/check и notification_api /internal/api/v1/otp/send;
+      # ждём их /health, иначе холодный старт ловит connection-refused гонку.
+      user_api:
+        condition: service_healthy
+      notification_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=auth_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_auth
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_auth
+      # connection pool sizing (low QPS → дефолт 5/1, см. .env.example).
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS:-5}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS:-5}
+      - USER_API_URL=http://user_api:8000
+      - NOTIFICATION_API_URL=http://notification_api:8005
+      - OTP_DELIVERY_TIMEOUT_SECONDS=${OTP_DELIVERY_TIMEOUT_SECONDS:-45}
+      # history_api нужен только для публикации security_events (step-up 2FA).
+      # Producer глушит сетевые ошибки — hard depends_on не требуется.
+      - HISTORY_API_URL=http://history_api:8002
+      - APP_PORT=8003
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-must-be-at-least-32-bytes-long}
+      - OTP_TTL_SECONDS=300
+      - OTP_MAX_ATTEMPTS=3
+      # 24h по умолчанию: для системы контроля доступа окно компрометации
+      # токена должно быть коротким. Длиннее можно выставить через .env.
+      - ACCESS_TOKEN_TTL_HOURS=${ACCESS_TOKEN_TTL_HOURS:-24}
+      # SECURE_COOKIES: secure-by-default — если оператор в production забудет
+      # переопределить переменную через `.env`, access_token всё равно уйдёт
+      # с флагом Secure, а не в открытом HTTP. dev/test ходят по HTTP
+      # (Secure-cookie на HTTP не сохраняется в cookie jar клиента →
+      # integration-тесты сломаются бы), поэтому такие сценарии ЯВНО
+      # переопределяют SECURE_COOKIES=false (см. `.env.fast` и
+      # `.github/workflows/tests.yml`).
+      - SECURE_COOKIES=${SECURE_COOKIES:-true}
+      # /login rate-limit: дефолт 100/60s — как у /verify ниже: gateway_tests
+      # создают class-scoped сессии (логин на каждый тест-класс) с одного IP
+      # и при 30/60s поздние классы ловят 429. **Production** должен снизить
+      # до 10-30/60s через .env (см. чеклист в services/auth_api/README.md).
+      - LOGIN_RATE_LIMIT=${LOGIN_RATE_LIMIT:-100}
+      - LOGIN_RATE_WINDOW_SECONDS=${LOGIN_RATE_WINDOW_SECONDS:-60}
+      # /verify rate-limit: дефолт 100/60s выбран чтобы integration-тесты с
+      # множеством /verify в одном IP не упирались в лимит. **Production**
+      # должен снизить до 10/60s через .env (защита от OTP brute-force —
+      # otp_max_attempts=3 закрывает только перебор одного OTP, не серию).
+      - VERIFY_RATE_LIMIT=${VERIFY_RATE_LIMIT:-100}
+      - VERIFY_RATE_WINDOW_SECONDS=${VERIFY_RATE_WINDOW_SECONDS:-60}
+      # Общий с user_api ключ HMAC. Подписывается каждый запрос к
+      # /internal/auth/check, чтобы злоумышленник в backend_net не мог
+      # повторить перехваченный password_hash. ОБЯЗАН совпадать с user_api.
+      - INTERNAL_AUTH_HMAC_KEY=${INTERNAL_AUTH_HMAC_KEY:-internal-auth-dev-key-do-not-use-in-prod}
+      # Общий с notification_api ключ HMAC. Подписывается каждый запрос
+      # к /internal/api/v1/otp/send (доставка OTP-кодов в Max-бот).
+      - INTERNAL_OTP_HMAC_KEY=${INTERNAL_OTP_HMAC_KEY:-internal-otp-dev-key-do-not-use-in-prod}
+      # Общий с user_api и locker_api ключ HMAC. Подписывает:
+      # /internal/user/{id}/max-context (auth_api → user_api) при issue
+      # step-up challenge и входящие /internal/api/v1/step-up/{issue,verify}
+      # (locker_api → auth_api). ОБЯЗАН совпадать в трёх сервисах.
+      - INTERNAL_STEP_UP_HMAC_KEY=${INTERNAL_STEP_UP_HMAC_KEY:-internal-step-up-dev-key-do-not-use-in-prod}
+      # Общий с history_api ключ HMAC. Подписывает /internal/api/v1/events/security
+      # (аудит step-up 2FA). ОБЯЗАН совпадать с history_api (SEC-05).
+      - INTERNAL_HISTORY_HMAC_KEY=${INTERNAL_HISTORY_HMAC_KEY:-internal-history-dev-key-do-not-use-in-prod}
+      # Общий с user_api ключ HMAC. Подписывает PII-read запросы auth_api →
+      # user_api: /internal/user/by-phone и /internal/user/{id}. ОБЯЗАН
+      # совпадать с user_api и reports_api (SEC-10).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+      # Общий с user_api ключ HMAC. Проверяет входящие /internal/api/v1/sessions/revoke
+      # от user_api (отзыв сессий после смены пароля / 2FA). ОБЯЗАН совпадать
+      # с user_api (SEC-14).
+      - INTERNAL_SESSION_REVOKE_HMAC_KEY=${INTERNAL_SESSION_REVOKE_HMAC_KEY:-internal-session-revoke-dev-key-do-not-use-in-prod}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: *deploy-1g
+    secrets:
+      - postgres_auth_password
+      - jwt_secret
+      - internal_auth_hmac_key
+      - internal_otp_hmac_key
+      - internal_step_up_hmac_key
+      - internal_history_hmac_key
+      - internal_user_read_hmac_key
+      - internal_session_revoke_hmac_key
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/health || exit 1"]
+
+  # Auth API Tests
+  auth_api_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/auth_api/Dockerfile
+      target: test
+    depends_on:
+      auth_api:
+        condition: service_healthy
+      user_api:
+        condition: service_healthy
+      history_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://auth_api:8003
+      - TEST_API_TIMEOUT=120
+      # Тот же дефолт, что у auth_api: rate-limit тест читает лимит из env,
+      # чтобы не рассыхаться с конфигом сервиса.
+      - LOGIN_RATE_LIMIT=${LOGIN_RATE_LIMIT:-100}
+      - DB_HOST=postgres_auth
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_auth
+      - USER_DB_HOST=postgres_user
+      - USER_DB_PORT=5432
+      # history_db нужен для проверки публикации security_events из step_up.
+      - HISTORY_DB_HOST=postgres_history
+      - HISTORY_DB_PORT=5432
+      - USER_API_URL=http://user_api:8000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-must-be-at-least-32-bytes-long}
+      - OTP_TTL_SECONDS=300
+      - OTP_MAX_ATTEMPTS=3
+      - ACCESS_TOKEN_TTL_HOURS=${ACCESS_TOKEN_TTL_HOURS:-24}
+      # Тот же ключ, что и в auth_api — integration step-up flow
+      # подписывает прямые запросы тем же HMAC, что использует locker_api.
+      - INTERNAL_STEP_UP_HMAC_KEY=${INTERNAL_STEP_UP_HMAC_KEY:-internal-step-up-dev-key-do-not-use-in-prod}
+      # Read-PII канал: live user_api держит ключ и отклоняет неподписанные
+      # запросы, поэтому integration-тесты, дёргающие by-phone/{id} напрямую,
+      # должны иметь тот же ключ для подписи (SEC-10).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+      # Тот же ключ, что и в auth_api — live auth_api держит ключ и отклоняет
+      # неподписанные /internal/api/v1/sessions/revoke, поэтому integration-тест,
+      # дёргающий endpoint напрямую, должен подписывать тем же HMAC (SEC-14).
+      - INTERNAL_SESSION_REVOKE_HMAC_KEY=${INTERNAL_SESSION_REVOKE_HMAC_KEY:-internal-session-revoke-dev-key-do-not-use-in-prod}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.auth_api
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/auth_api:/coverage:rw
+    entrypoint: *pytest-entry
+
+  # Gateway Integration Tests
+  gateway_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: tests/gateway/Dockerfile
+    # повышено с service_started до service_healthy. apache_gateway
+    # сам ждёт healthy backends, но gateway_tests должны
+    # дополнительно дождаться зелёного gateway healthcheck — иначе первый
+    # запрос ловит 502 пока mod_lua прогревается.
+    depends_on:
+      apache_gateway:
+        condition: service_healthy
+      user_api:
+        condition: service_healthy
+      auth_api:
+        condition: service_healthy
+      acm:
+        condition: service_healthy
+      reports_api:
+        condition: service_healthy
+      postgres_auth:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - GATEWAY_URL=http://apache_gateway
+      - ADMIN_PHONE=+79000000000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - TEST_API_TIMEOUT=120
+      - USER_DB_HOST=postgres_user
+      - USER_DB_PORT=5432
+      - USER_DB_USER=admin
+      - USER_DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - USER_DB_NAME=scud_users
+      # auth DB — для SEC-07 теста (инспекция таблицы login_rate_limit:
+      # проверяем, что gateway форвардит реальный клиентский IP, а не
+      # один общий и не подделанный X-Real-IP).
+      - AUTH_DB_HOST=postgres_auth
+      - AUTH_DB_PORT=5432
+      - AUTH_DB_USER=admin
+      - AUTH_DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - AUTH_DB_NAME=scud_auth
+
+  # ACM — Модуль контроля разделения доступа (порт 8004)
+  acm:
+    build:
+      context: .
+      dockerfile: services/acm/Dockerfile
+      target: production
+    depends_on:
+      # ACM ходит в scud_users → через user-пулер (pgbouncer_user:6432) под
+      # ролью acm_ro (SEC-24); userlist user-пулера содержит обе роли.
+      pgbouncer_user:
+        condition: service_healthy
+      auth_api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=acm
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_user
+      - DB_PORT=6432
+      # SEC-24: ACM ходит под least-privilege ролью acm_ro (SELECT-only),
+      # а не под admin. Пароль — из отдельного секрета acm_db_password
+      # (env-fallback совпадает с dev-default содержимым секрета).
+      - DB_USER=acm_ro
+      - DB_PASSWORD=${ACM_DB_PASSWORD:-acm_ro_dev_password}
+      - DB_NAME=scud_users
+      # connection pool sizing (low QPS, read-only → дефолт 5/1).
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS:-5}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS:-5}
+      - AUTH_API_URL=http://auth_api:8003
+      - APP_PORT=8004
+      - CACHE_TTL_SECONDS=30
+      - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD:-redis-dev-only-do-not-use-in-prod}@redis:6379/0}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: *deploy-1g
+    # ACM ходит read-only в scud_users под выделенной least-privilege ролью
+    # acm_ro (SEC-24); пароль роли — секрет acm_db_password (read_secret).
+    # redis_password — для сборки REDIS_URL когда env REDIS_URL не выставлен
+    # (см. acm/main.py).
+    secrets:
+      - redis_password
+      - acm_db_password
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      # start_period даёт ACM фору на wait_for_db + прогрев redis-кэша,
+      # прежде чем неуспешный /health начнёт считаться против retries.
+      start_period: 10s
+
+  # ACM Tests
+  acm_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/acm/Dockerfile
+      target: test
+    depends_on:
+      acm:
+        condition: service_healthy
+      auth_api:
+        condition: service_healthy
+      user_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://acm:8004
+      - TEST_API_TIMEOUT=120
+      - USER_DB_HOST=postgres_user
+      - USER_DB_PORT=5432
+      - USER_DB_USER=admin
+      - USER_DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      # SEC-24: read-only роль acm_ro — интеграционный тест проверяет, что под
+      # ней SELECT работает, а INSERT/CREATE падают с insufficient_privilege.
+      - ACM_RO_DB_USER=acm_ro
+      - ACM_RO_DB_PASSWORD=${ACM_DB_PASSWORD:-acm_ro_dev_password}
+      - AUTH_DB_HOST=postgres_auth
+      - AUTH_DB_PORT=5432
+      - AUTH_DB_USER=admin
+      - AUTH_DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.acm
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/acm:/coverage:rw
+    entrypoint: *pytest-entry
+
+  # База данных PostgreSQL для Notification API
+  postgres_notification:
+    image: *pg-image
+    volumes:
+      - postgres_notification_data:/var/lib/postgresql/data
+      - ./init-scripts/init-notification-db.sh:/docker-entrypoint-initdb.d/init-notification-db.sh:ro
+      - ./services/notification_api/app/notification_data/db/migrations/:/migrations/:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      # см. POSTGRES_PASSWORD_FILE в postgres_user.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_notification_password
+      - POSTGRES_DB=scud_notifications
+    secrets:
+      - postgres_notification_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_notifications"]
+
+  # База данных PostgreSQL для Reports API
+  postgres_reports:
+    image: *pg-image
+    volumes:
+      - postgres_reports_data:/var/lib/postgresql/data
+      - ./init-scripts/init-reports-db.sh:/docker-entrypoint-initdb.d/init-reports-db.sh:ro
+      - ./services/reports_api/app/reports_data/db/migrations/:/migrations/:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      # см. POSTGRES_PASSWORD_FILE в postgres_user.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_reports_password
+      - POSTGRES_DB=scud_reports
+    secrets:
+      - postgres_reports_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d scud_reports"]
+
+  # Notification API - Подсистема 6: Уведомления
+  notification_api:
+    build:
+      context: .
+      dockerfile: services/notification_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_notification:6432.
+      pgbouncer_notification:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=notification_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_notification
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_notifications
+      # connection pool sizing (low QPS → дефолт 5/1, см. .env.example).
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS:-5}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS:-5}
+      - APP_PORT=8005
+      - SCHEDULER_INTERVAL_SECONDS=30
+      - MAX_BOT_API_URL=${MAX_BOT_API_URL:-https://platform-api.max.ru}
+      - USER_API_URL=http://user_api:8000
+      # Ключ для подписи запросов в /internal/user/by-invite (user_api).
+      # ОБЯЗАН совпадать с user_api.
+      - INTERNAL_MAX_BINDING_HMAC_KEY=${INTERNAL_MAX_BINDING_HMAC_KEY:-internal-max-binding-dev-key-do-not-use-in-prod}
+      # SMS-транспорт (Yeastar TG200, через wg_gateway sidecar, profile sms).
+      # Пусто на dev/CI — OTP уходит в MAX/queue вместо SMS.
+      - SMS_GATEWAY_URL=${SMS_GATEWAY_URL:-}
+      - SMS_MIN_INTERVAL_SECONDS=${SMS_MIN_INTERVAL_SECONDS:-10}
+      - SMS_MAX_QUEUE_WAIT_SECONDS=${SMS_MAX_QUEUE_WAIT_SECONDS:-10}
+      - SMS_GATEWAY_TIMEOUT_SECONDS=${SMS_GATEWAY_TIMEOUT_SECONDS:-25}
+      - MAX_SEND_TIMEOUT_SECONDS=${MAX_SEND_TIMEOUT_SECONDS:-8}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: *deploy-1g
+    secrets:
+      - postgres_notification_password
+      - internal_otp_hmac_key
+      - internal_max_binding_hmac_key
+      - max_bot_token
+      - sms_api_user
+      - sms_api_password
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/health || exit 1"]
+
+  # Notification API Tests
+  notification_api_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/notification_api/Dockerfile
+      target: test
+    depends_on:
+      notification_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - SERVICE_NAME=notification_api
+      - TEST_BASE_URL=http://notification_api:8005
+      - TEST_API_TIMEOUT=120
+      - DB_HOST=postgres_notification
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_notifications
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.notification_api
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/notification_api:/coverage:rw
+    entrypoint: *pytest-entry
+
+  # Reports API - Подсистема отчётов
+  reports_api:
+    build:
+      context: .
+      dockerfile: services/reports_api/Dockerfile
+      target: production
+    depends_on:
+      # Через PgBouncer (transaction pooling): DB_HOST=pgbouncer_reports:6432.
+      pgbouncer_reports:
+        condition: service_healthy
+      # reports_api резолвит ФИО для отчётов через user_api.
+      user_api:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      # SERVICE_NAME → label `service` в Prometheus-метриках.
+      - SERVICE_NAME=reports_api
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=pgbouncer_reports
+      - DB_PORT=6432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_reports
+      # connection pool sizing (low QPS → дефолт 5/1, см. .env.example).
+      - DB_MAX_WORKERS=${DB_MAX_WORKERS:-5}
+      - DB_MIN_CONNECTIONS=${DB_MIN_CONNECTIONS:-5}
+      - APP_PORT=8006
+      # хранилище сгенерированных отчётов (см. mounted volume reports_data).
+      - REPORTS_STORAGE_PATH=/data/reports
+      - REPORT_LINK_TTL_SECONDS=86400
+      - REPORT_WORKER_INTERVAL_S=5
+      - REPORT_MAX_ATTEMPTS=3
+      - HISTORY_API_URL=http://history_api:8002
+      # резолв ФИО по created_by при генерации отчётов.
+      - USER_API_URL=http://user_api:8000
+      # Общий с user_api ключ HMAC. Подписывает PII-read запросы reports_api →
+      # user_api: /internal/users/names. ОБЯЗАН совпадать с user_api и
+      # auth_api (SEC-10).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    deploy: *deploy-1g
+    secrets:
+      - postgres_reports_password
+      - internal_user_read_hmac_key
+    volumes:
+      - reports_data:/data/reports
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8006/health || exit 1"]
+
+  # Reports API Tests
+  reports_api_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: services/reports_api/Dockerfile
+      target: test
+    depends_on:
+      reports_api:
+        condition: service_healthy
+      history_api:
+        condition: service_healthy
+      postgres_history:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - TEST_BASE_URL=http://reports_api:8006
+      - TEST_API_TIMEOUT=120
+      - DB_HOST=postgres_reports
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_reports
+      - REPORTS_STORAGE_PATH=/data/reports
+      # Параметры подключения к scud_history для сидирования command_history
+      # в интеграционном round-trip тесте (reports_api → history_api).
+      - HISTORY_DB_HOST=postgres_history
+      - HISTORY_DB_PORT=5432
+      - HISTORY_DB_USER=admin
+      - HISTORY_DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - HISTORY_DB_NAME=scud_history
+      # Read-PII канал: live user_api держит ключ и отклоняет неподписанные
+      # запросы, поэтому тесты, дёргающие /internal/users/names напрямую,
+      # должны подписывать тем же HMAC (SEC-10).
+      - INTERNAL_USER_READ_HMAC_KEY=${INTERNAL_USER_READ_HMAC_KEY:-internal-user-read-dev-key-do-not-use-in-prod}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.reports_api
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/reports_api:/coverage:rw
+      - reports_data:/data/reports
+    entrypoint: *pytest-entry
+
+  # shared_tests — unit + integration для shared/ (mqtt_client wrapper и пр.).
+  # Образ несёт shared/ (вместе с vendored gmqtt) на PYTHONPATH; интеграционный
+  # round-trip тест идёт против реального брокера mqtt по backend_net.
+  shared_tests:
+    profiles: *tests-profiles
+    build:
+      context: .
+      dockerfile: shared/Dockerfile.tests
+      target: test
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - MQTT_HOST=mqtt
+      - MQTT_PORT=1883
+      - MQTT_USER=scud_backend
+      # Тестовый клиент берёт пароль из env (dev-fallback совпадает с тем, что
+      # брокер пишет в passwordfile из секрета/env). Литерал не коммитится.
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-scud_backend_dev_password}
+      - COVERAGE_RCFILE=/coverage-config/coveragerc
+      - COVERAGE_FILE=/coverage/.coverage.shared
+    working_dir: /app/shared
+    volumes:
+      - *coverage-config-mount
+      - ./.coverage-data/shared:/coverage:rw
+    entrypoint: *pytest-entry
+
+
+  # mqtt_tls_tests — haproxy -c настоящим бинарём 2.6.23 + живой TLS-хендшейк.
+  # Брокер не нужен: все проверки заканчиваются на хендшейке. Coverage не пишет.
+  # mqtt_tests — сверка ACL тома с дефолтами образа (acl-reconcile.sh).
+  mqtt_tests:
+    profiles: *tests-profiles
+    build:
+      context: ./mqtt
+      dockerfile: Dockerfile
+      target: test
+    image: scud-mqtt-tests:dev
+    networks: *backend-net
+
+  mqtt_tls_tests:
+    profiles: *tests-profiles
+    build:
+      context: ./mqtt-tls
+      dockerfile: Dockerfile
+      target: test
+    image: scud-mqtt-tls-tests:dev
+    networks: *backend-net
+  # === Профиль monitoring: Zabbix 7.0.10 consumer-стек ======================
+  # НЕ запускается обычным `docker compose up`. Скрейпит внутренний /metrics
+  # (Apache его не проксирует), потому все три сервиса — на backend_net.
+  #   docker compose --profile monitoring up -d
+  postgres_zabbix:
+    profiles: [monitoring]
+    image: *pg-image
+    volumes:
+      - postgres_zabbix_data:/var/lib/postgresql/data
+      - ./init-scripts/init-zabbix-db.sh:/docker-entrypoint-initdb.d/init-zabbix-db.sh:ro
+    networks: *backend-net
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_zabbix_password
+      - POSTGRES_DB=zabbix
+    secrets:
+      - postgres_zabbix_password
+      - zabbix_db_password
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-pg
+      test: ["CMD-SHELL", "pg_isready -U admin -d zabbix"]
+
+  zabbix_server:
+    profiles: [monitoring]
+    build:
+      context: ../monitoring/zabbix-server
+      dockerfile: Dockerfile
+      target: production
+    image: scud-zabbix-server:dev
+    depends_on:
+      postgres_zabbix:
+        condition: service_healthy
+    environment:
+      - DB_SERVER_HOST=postgres_zabbix
+      - DB_NAME=zabbix
+      - DB_USER=zabbix
+      - DB_PASSWORD_FILE=/run/secrets/zabbix_db_password
+    secrets:
+      - zabbix_db_password
+    ports:
+      - "127.0.0.1:10051:10051"
+    networks: *backend-net
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "zabbix_server -R config_cache_reload"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  zabbix_web:
+    profiles: [monitoring]
+    build:
+      context: ../monitoring/zabbix-web
+      dockerfile: Dockerfile
+      target: production
+    image: scud-zabbix-web:dev
+    depends_on:
+      postgres_zabbix:
+        condition: service_healthy
+    environment:
+      - DB_SERVER_HOST=postgres_zabbix
+      - DB_NAME=zabbix
+      - DB_USER=zabbix
+      - DB_PASSWORD_FILE=/run/secrets/zabbix_db_password
+      - ZBX_SERVER_HOST=zabbix_server
+      - ZBX_SERVER_PORT=10051
+    secrets:
+      - zabbix_db_password
+    ports:
+      # Loopback-only (внутренний UI; наружу — через SSH-туннель). 8091, т.к.
+      # 8090 занят docs-index из docker-compose.docs.yaml.
+      - "127.0.0.1:8091:8080"
+    networks: *backend-net
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    deploy: *deploy-256
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/index.php >/dev/null 2>&1 || exit 1"]
+
+  # Unprivileged infra collector (Этап 2): DB-tier metrics the host/server
+  # knows but the app does not — PgBouncer server-side pools (cl_waiting,
+  # sv_active, maxwait, avg_query_time via SHOW POOLS/SHOW STATS) and
+  # pg_stat_* internals — via the scud.dbprobe[*] UserParameter (psql to the
+  # admin consoles). Active mode: pushes to zabbix_server:10051; NO published
+  # ports, NO pid:host, NO privileges.
+  zabbix_agent2:
+    profiles: [monitoring]
+    build:
+      context: ../monitoring/zabbix-agent2
+      dockerfile: Dockerfile
+      target: production
+    image: scud-zabbix-agent2:dev
+    depends_on:
+      zabbix_server:
+        condition: service_healthy
+    environment:
+      # Active-mode only: the server pulls nothing; the agent pushes to
+      # ServerActive. Server= is required by the binary even in active mode.
+      - ZBX_SERVER_ACTIVE=zabbix_server
+      - ZBX_HOSTNAME=scud-agent2
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        {
+          echo "Server=zabbix_server"
+          echo "ServerActive=${ZBX_SERVER_ACTIVE:-zabbix_server}"
+          echo "Hostname=${ZBX_HOSTNAME:-scud-agent2}"
+          echo "Include=/etc/zabbix/zabbix_agent2.d/*.conf"
+          echo "LogType=console"
+        } > /etc/zabbix/zabbix_agent2.conf
+        exec /usr/sbin/zabbix_agent2 -c /etc/zabbix/zabbix_agent2.conf -f
+    secrets:
+      # redis is collected via the scud_redis_up HTTP fallback (cert-gate A2-2,
+      # REDIS_PLUGIN_ABSENT recorded in monitoring/CERT_GATE.md — Task D5);
+      # agent2 carries no redis credential.
+      - pgb_admin_password
+      - postgres_user_password
+      - postgres_locker_password
+      - postgres_history_password
+      - postgres_auth_password
+      - postgres_notification_password
+      - postgres_reports_password
+    # Host-level metrics (scud-infra-host template): pid:host makes the
+    # container's /proc reflect the HOST, so the built-in system.cpu.*/
+    # vm.memory.* keys read the VM; the host root is mounted read-only at
+    # /hostfs for vfs.fs.size[/hostfs,...].
+    pid: host
+    volumes:
+      # Том backup_data монтируется только для чтения: агент читает
+      # /backups/last_run_status, записанный backup.sh (scud.backup.status).
+      - backup_data:/backups:ro
+      - /:/hostfs:ro
+    networks: *backend-net
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.1
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.1"
+    logging: *default-logging
+    healthcheck:
+      <<: *hc-http
+      test: ["CMD-SHELL", "zabbix_agent2 -c /etc/zabbix/zabbix_agent2.conf -t agent.ping 2>/dev/null | grep -q '|1]'"]
+
+  # Агрегатор логов: читает json-file логи всех контейнеров через bind-mount
+  # /var/lib/docker/containers и пишет в именованный том syslog_ng_logs.
+  # Профиль `monitoring` — не запускается при обычном `docker compose up`.
+  # Не добавляет depends_on к прикладным сервисам; падение syslog_ng не блокирует стек.
+  syslog_ng:
+    profiles: [monitoring]
+    build:
+      context: ../monitoring/syslog-ng
+      dockerfile: Dockerfile
+      target: production
+    image: scud-syslog-ng:dev
+    networks: *backend-net
+    volumes:
+      - /var/lib/docker/containers:/var/log/containers:ro
+      - syslog_ng_logs:/var/log/scud
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.1
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.1"
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "syslog-ng-ctl", "stats"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # SMS-шлюз (Yeastar TG200) доступен только по WireGuard. Sidecar поднимает
+  # wg0 (split-tunnel) и форвардит :7777 внутрь backend_net. Профиль sms —
+  # не стартует при обычном up (dev/CI без туннеля).
+  wg_gateway:
+    profiles: [sms]
+    build:
+      context: ../monitoring/wg-gateway
+      dockerfile: Dockerfile
+    image: scud-wg-gateway:dev
+    networks: *backend-net
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - WG_ADDRESS=${WG_ADDRESS:-10.8.0.14/24}
+      - WG_PEER_PUBKEY=${WG_PEER_PUBKEY:-}
+      - WG_ENDPOINT=${WG_ENDPOINT:-94.103.85.33:29156}
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-10.8.0.0/24}
+      - WG_KEEPALIVE=${WG_KEEPALIVE:-25}
+      - SMS_GATEWAY_HOST=${SMS_GATEWAY_HOST:-10.8.0.19}
+      - SMS_GATEWAY_PORT=${SMS_GATEWAY_PORT:-7777}
+      - FORWARD_PORT=7777
+    secrets:
+      - wg_private_key
+      - wg_preshared_key
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.1
+    healthcheck:
+      test: ["CMD-SHELL", "wg show wg0 latest-handshakes | awk '{print ($2>0)?0:1}' | grep -q 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # Backup-sidecar для 6 postgres-серверов.
+  # Профиль `backup` — НЕ запускается при обычном `docker compose up`.
+  # Запуск:
+  #   docker compose --profile backup up -d backup            # фоновый daemon (sleep-loop, раз в сутки)
+  #   docker compose --profile backup run --rm backup \
+  #       /scripts/backup.sh                                   # разовый дамп
+  # Restore-инструкция — в DEPLOYMENT.md, раздел "Disaster recovery".
+  backup:
+    profiles: [backup]
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    depends_on:
+      postgres_user:
+        condition: service_healthy
+      postgres_locker:
+        condition: service_healthy
+      postgres_history:
+        condition: service_healthy
+      postgres_auth:
+        condition: service_healthy
+      postgres_notification:
+        condition: service_healthy
+      postgres_reports:
+        condition: service_healthy
+    networks: *backend-net
+    volumes:
+      - backup_data:/backups
+    secrets:
+      - postgres_user_password
+      - postgres_locker_password
+      - postgres_history_password
+      - postgres_auth_password
+      - postgres_notification_password
+      - postgres_reports_password
+    environment:
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-86400}
+      - BACKUP_DIR=/backups
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    deploy: *deploy-256
+    logging: *default-logging
+
+  # Dockerized lint runner (profile: lint). Built from linters/Dockerfile,
+  # which is the single source of truth for linter versions — CI job `lint`
+  # builds and runs the same image. Sources mounted read-only at /repo.
+  #   docker compose --profile lint build linters
+  #   docker compose --profile lint run --rm linters ruff check backend/services backend/shared
+  # Auto-fix needs a writable mount:
+  #   docker compose --profile lint run --rm --volume "$(pwd)/..:/repo" linters ...
+  linters:
+    profiles: [lint]
+    build:
+      context: .
+      dockerfile: linters/Dockerfile
+    image: scud-linters:latest
+    working_dir: /repo
+    environment:
+      - MYPYPATH=/repo/backend
+    volumes:
+      - ../:/repo:ro
+
+  # Полу-ручной end-to-end тест OTP через РЕАЛЬНЫЙ Max-бот (profile: manual).
+  # Операторский инструмент, не автотест — интерактивный, в CI не гоняется.
+  # Запуск (нужен TTY, поэтому run, не up):
+  #   docker compose --profile manual run --rm --build max_otp_realtest
+  # Предусловия и шаги — backend/tools/max-otp-realtest/README.md.
+  max_otp_realtest:
+    profiles: [manual]
+    build:
+      context: ./tools/max-otp-realtest
+      dockerfile: Dockerfile
+    depends_on:
+      apache_gateway:
+        condition: service_healthy
+      postgres_user:
+        condition: service_healthy
+    networks: *backend-net
+    environment:
+      - GATEWAY_URL=http://apache_gateway
+      - ADMIN_PHONE=+79000000000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - MAX_BOT_API_URL=${MAX_BOT_API_URL:-https://platform-api.max.ru}
+      - MAX_BOT_USERNAME=${MAX_BOT_USERNAME:-}
+      - DB_HOST=postgres_user
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_NAME=scud_users
+      - BIND_TIMEOUT_S=${BIND_TIMEOUT_S:-300}
+    secrets:
+      - postgres_user_password
+      - max_bot_token
+    # Интерактивный ввод (нажми Enter / введи код) требует TTY.
+    stdin_open: true
+    tty: true
+
+  # Apache Gateway - Единая точка входа для всех API
+  apache_gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    # condition: service_healthy для всех 6 backend сервисов — иначе
+    # gateway отвечает 502 на cold start пока backends ещё не прогрелись.
+    depends_on:
+      user_api:
+        condition: service_healthy
+      locker_api:
+        condition: service_healthy
+      history_api:
+        condition: service_healthy
+      auth_api:
+        condition: service_healthy
+      acm:
+        condition: service_healthy
+      notification_api:
+        condition: service_healthy
+      reports_api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks: *backend-net
+    environment:
+      # CORS Allow-Origin для preflight/cross-origin запросов от фронтенда.
+      # Дефолт `*` оставлен только для dev/integration tests. **В production
+      # ОБЯЗАТЕЛЬНО** установить конкретный origin фронтенда через `.env`
+      # (например `https://scud.example.com`) — `*` несовместим с
+      # `Access-Control-Allow-Credentials`, а cookie у нас Secure+SameSite=Strict.
+      - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-*}
+      # TRUSTED_PROXY_CIDR (SEC-07): доверенный хоп для mod_remoteip — адрес
+      # или CIDR TLS-терминатора (nginx/HAProxy), чьему `X-Real-IP` gateway
+      # доверяет при вычислении реального клиентского IP. Дефолт — loopback
+      # под документированную nginx-схему (nginx → 127.0.0.1:80). **В
+      # production** укажите адрес/подсеть вашего терминатора, иначе либо
+      # X-Real-IP клиента не будет учтён (rate-limit по IP терминатора), либо
+      # терминатор окажется недоверенным. См. backend/DEPLOYMENT.md.
+      - TRUSTED_PROXY_CIDR=${TRUSTED_PROXY_CIDR:-127.0.0.1/8}
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    deploy: *deploy-512
+    logging: *default-logging
+    # start_period: 10s — apache успевает прогрузить mod_lua и
+    # инициализировать прокси; в этом окне healthcheck-фейлы игнорируются.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    volumes:
+      # путь к собранному фронтенду параметризован через FRONTEND_PATH.
+      # Дефолт `/root/frontend` сохранён для обратной совместимости с dev/CI.
+      # В production задаётся через .env (например /opt/scud/frontend/dist).
+      # Если директория не существует — apache отдаёт только REST через
+      # ProxyPass, статика отсутствует.
+      # Ролевые бандлы фронтенда — отдельные read-only тома. Дефолты берутся из
+      # единого FRONTEND_PATH (обратная совместимость со стендом /root/frontend).
+      # В CI/тестах FRONTEND_PATH указывает на tests/gateway/fixtures/frontend.
+      # Отсутствующий source → Docker создаёт пустую директорию (как раньше).
+      - ${FRONTEND_PATH:-/root/frontend}/public:/var/www/public:ro
+      - ${FRONTEND_PATH:-/root/frontend}/worker:/var/www/roles/worker:ro
+      - ${FRONTEND_PATH:-/root/frontend}/operator:/var/www/roles/operator:ro
+      - ${FRONTEND_PATH:-/root/frontend}/admin:/var/www/roles/admin:ro
+
+# Сети
+networks:
+  backend_net:
+    driver: bridge
+
+# Volumes
+volumes:
+  postgres_user_data:
+  postgres_locker_data:
+  postgres_history_data:
+  postgres_auth_data:
+  postgres_notification_data:
+  postgres_reports_data:
+  reports_data:
+  redis_data:
+  # durable volume для дампов postgres (см. сервис `backup`).
+  # Расположен на docker-volume, не на host path → git его не видит.
+  backup_data:
+  # writable shared config для MQTT-брокера: provisioning (Plan 2) дописывает
+  # relay-{id} в passwordfile/aclfile, in-container watcher хеширует + SIGHUP.
+  mqtt_config:
+  # backend-БД Zabbix (профиль monitoring) — отдельный том, не делит данные
+  # с прикладными postgres-инстансами.
+  postgres_zabbix_data:
+  # Дurable том для агрегированных логов syslog-ng (профиль monitoring).
+  syslog_ng_logs:
+
+# Docker secrets — file-mounts для production hardening.
+# Файлы лежат в backend/secrets/ (gitignored, кроме .gitkeep).
+# Backend-сервисы:read_secret() читает /run/secrets/* с fallback
+# на env-переменные.
+# Postgres-серверы:postgres-image (file_env) нативно читает
+# POSTGRES_PASSWORD_FILE при инициализации. ВАЖНО: file_env запрещает
+# одновременную установку POSTGRES_PASSWORD и POSTGRES_PASSWORD_FILE
+# («mutually exclusive»), поэтому env-варианта здесь нет — secret-файл
+# обязан существовать перед `docker compose up`. Создание файла —
+# первый шаг deploy (см. DEPLOYMENT.md → "First-time deployment").
+secrets:
+  postgres_user_password:
+    file: ./secrets/postgres_user_password
+  postgres_locker_password:
+    file: ./secrets/postgres_locker_password
+  postgres_history_password:
+    file: ./secrets/postgres_history_password
+  postgres_auth_password:
+    file: ./secrets/postgres_auth_password
+  postgres_notification_password:
+    file: ./secrets/postgres_notification_password
+  postgres_reports_password:
+    file: ./secrets/postgres_reports_password
+  jwt_secret:
+    file: ./secrets/jwt_secret
+  admin_password:
+    file: ./secrets/admin_password
+  internal_auth_hmac_key:
+    file: ./secrets/internal_auth_hmac_key
+  internal_otp_hmac_key:
+    file: ./secrets/internal_otp_hmac_key
+  internal_max_binding_hmac_key:
+    file: ./secrets/internal_max_binding_hmac_key
+  internal_user_read_hmac_key:
+    file: ./secrets/internal_user_read_hmac_key
+  internal_session_revoke_hmac_key:
+    file: ./secrets/internal_session_revoke_hmac_key
+  internal_step_up_hmac_key:
+    file: ./secrets/internal_step_up_hmac_key
+  internal_history_hmac_key:
+    file: ./secrets/internal_history_hmac_key
+  max_bot_token:
+    file: ./secrets/max_bot_token
+  redis_password:
+    file: ./secrets/redis_password
+  mqtt_password:
+    file: ./secrets/mqtt_password
+  acm_db_password:
+    file: ./secrets/acm_db_password
+  postgres_zabbix_password:
+    file: ./secrets/postgres_zabbix_password
+  zabbix_db_password:
+    file: ./secrets/zabbix_db_password
+  pgb_admin_password:
+    file: ./secrets/pgb_admin_password
+  sms_api_user:
+    file: ./secrets/sms_api_user
+  sms_api_password:
+    file: ./secrets/sms_api_password
+  wg_private_key:
+    file: ./secrets/wg_private_key
+  wg_preshared_key:
+    file: ./secrets/wg_preshared_key

@@ -1,0 +1,385 @@
+Locker:
+  type: object
+  description: Телекоммуникационный шкаф в системе СКУД
+  required:
+    - id
+    - inventory_number
+    - connectivity
+    - door
+    - operational_status
+    - created_at
+    - updated_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/LockerId'
+    inventory_number:
+      type: string
+      description: Инвентарный номер шкафа
+      example: "СО №777"
+    location_address:
+      type: string
+      nullable: true
+      description: Адрес расположения шкафа
+      example: "г. Москва, ул. Ленина, д. 1"
+    location_lat:
+      type: number
+      format: double
+      nullable: true
+      description: Широта местоположения
+      example: 55.751244
+    location_lon:
+      type: number
+      format: double
+      nullable: true
+      description: Долгота местоположения
+      example: 37.618423
+    connectivity:
+      $ref: '#/LockerConnectivity'
+    door:
+      $ref: '#/LockerDoor'
+    operational_status:
+      $ref: '#/LockerOperationalStatus'
+    last_seen_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: Дата и время последней активности устройства
+    last_opened_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: |
+            Дата и время последнего успешно выполненного открытия шкафа.
+            Обновляется при получении подтверждения executed на команду
+            open от устройства. null — шкаф ни разу не открывался по
+            команде с момента ввода в эксплуатацию.
+    who_open_last:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: |
+            ID пользователя, последним успешно открывшего шкаф.
+            Записывается одной транзакцией с last_opened_at при получении
+            подтверждения executed на команду open от устройства, поэтому
+            оба поля согласованы. null — шкаф ни разу не открывался по
+            команде, либо последняя команда open была инициирована
+            системно (без X-Remote-User, например автоматизацией).
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время создания записи
+    updated_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время последнего обновления
+    created_by:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: ID пользователя, создавшего запись
+    updated_by:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: ID пользователя, последним обновившего запись
+    description:
+      type: string
+      nullable: true
+      description: Описание шкафа
+      example: "Шкаф связи на объекте A"
+    metadata:
+      type: object
+      description: Дополнительные метаданные (произвольный JSON)
+      example: {}
+    public_key:
+      type: string
+      nullable: true
+      description: |
+        Ed25519 публичный ключ устройства (base64url без паддинга, 32 байта).
+        null — ключ ещё не зарегистрирован (устройство не может подключиться).
+      example: "YEMsEgIBW_Q5RmFz-qL3N2x8kD1mVoJhPT6ceU4wXrs"
+    board_version:
+      type: integer
+      nullable: true
+      minimum: 1
+      maximum: 2
+      description: Версия протокола платы (1 или 2) из последнего stat; null — stat ещё не приходил.
+      example: 2
+    has_relays:
+      type: boolean
+      nullable: true
+      description: |
+        Есть ли у платы блок реле: v1 — всегда true, v2 — `relay_en == 1`.
+        null — неизвестно (stat ещё не приходил). Каналы — `GET /locker/{id}/relays`.
+      example: true
+
+LockerConnectivity:
+  type: string
+  description: Состояние связи шкафа (управляется MQTT-ингестом по stat)
+  enum:
+    - online
+    - offline
+  example: online
+
+LockerDoor:
+  type: string
+  description: Состояние двери шкафа (управляется результатами команд open/close)
+  enum:
+    - closed
+    - open
+  example: closed
+
+LockerOperationalStatus:
+  type: string
+  description: Эксплуатационный статус шкафа (управляется оператором / StateMonitor)
+  enum:
+    - normal
+    - maintenance
+    - alarm
+  example: normal
+
+LockerTransport:
+  type: string
+  description: |
+    Транспорт устройства: 'mqtt' (релейные платы по MQTT) — единственный
+    создаваемый транспорт; для него обязателен `relay_id`. 'ws'
+    (Ed25519/JSON WebSocket) — legacy read-only: значение всё ещё может
+    вернуться для ранее созданных шкафов, но новые ws-шкафы не создаются.
+  enum:
+    - ws
+    - mqtt
+  example: mqtt
+
+LockerCreate:
+  type: object
+  description: Данные для создания нового шкафа
+  required:
+    - inventory_number
+  properties:
+    inventory_number:
+      type: string
+      description: Инвентарный номер шкафа (уникальный)
+      example: "СО №777"
+    transport:
+      allOf:
+        - $ref: '#/LockerTransport'
+      default: mqtt
+      description: |
+        Транспорт устройства. Единственное допустимое значение при создании —
+        'mqtt' (по умолчанию); для него обязателен `relay_id`, а locker_api
+        дополнительно провижинит broker-креды relay-{id}. Значение 'ws' —
+        legacy и при создании отклоняется (400).
+    relay_id:
+      type: integer
+      nullable: true
+      description: |
+        Целочисленный идентификатор релейной платы (поле `id` в payload
+        stat/rep, топик com/{relay_id}, broker-user relay-{relay_id}).
+        Обязателен и уникален для transport=mqtt (единственного создаваемого
+        транспорта); null остаётся только у legacy ws-шкафов.
+      example: 4242
+    location_address:
+      type: string
+      description: Адрес расположения
+      example: "г. Москва, ул. Ленина, д. 1"
+    location_lat:
+      type: number
+      format: double
+      description: Широта
+      example: 55.751244
+    location_lon:
+      type: number
+      format: double
+      description: Долгота
+      example: 37.618423
+    description:
+      type: string
+      description: Описание шкафа
+      example: "Шкаф связи на объекте A"
+  if:
+    properties:
+      transport:
+        const: mqtt
+    required:
+      - transport
+  then:
+    required:
+      - relay_id
+    properties:
+      relay_id:
+        type: integer
+        description: Для transport=mqtt обязателен и не может быть null.
+
+LockerUpdate:
+  type: object
+  description: Данные для обновления шкафа
+  properties:
+    inventory_number:
+      type: string
+      description: Новый инвентарный номер
+      example: "ЩУ ТОИ №888"
+    location_address:
+      type: string
+      description: Новый адрес
+      example: "г. Москва, ул. Пушкина, д. 2"
+    location_lat:
+      type: number
+      format: double
+      description: Новая широта
+      example: 55.752244
+    location_lon:
+      type: number
+      format: double
+      description: Новая долгота
+      example: 37.619423
+    description:
+      type: string
+      description: Новое описание
+      example: "Шкаф связи на объекте B"
+
+LockerStateUpdate:
+  type: object
+  description: Обновление эксплуатационного статуса шкафа
+  required:
+    - operational_status
+  properties:
+    operational_status:
+      $ref: '#/LockerOperationalStatus'
+
+LockerStateResponse:
+  type: object
+  description: Ответ с текущим состоянием шкафа
+  required:
+    - locker_id
+    - connectivity
+    - door
+    - operational_status
+  properties:
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    connectivity:
+      $ref: '#/LockerConnectivity'
+    door:
+      $ref: '#/LockerDoor'
+    operational_status:
+      $ref: '#/LockerOperationalStatus'
+    last_seen_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+
+LockerBrief:
+  type: object
+  description: Краткая информация о шкафе (только ID и инвентарный номер)
+  required:
+    - id
+    - inventory_number
+  properties:
+    id:
+      $ref: './common_fields.yaml#/LockerId'
+    inventory_number:
+      type: string
+      description: Инвентарный номер шкафа
+      example: "СО №777"
+
+LockerLocation:
+  type: object
+  description: |
+    Шкаф в формате геопозиции (id, координаты и operational_status).
+    Используется фронтендом карты для цветовой индикации маркеров без
+    отдельного запроса на каждый шкаф.
+  required:
+    - id
+    - operational_status
+  properties:
+    id:
+      $ref: './common_fields.yaml#/LockerId'
+    location_lat:
+      type: number
+      format: double
+      nullable: true
+      description: Широта местоположения
+      example: 55.751244
+    location_lon:
+      type: number
+      format: double
+      nullable: true
+      description: Долгота местоположения
+      example: 37.618423
+    location_address:
+      type: string
+      nullable: true
+      description: Адрес расположения шкафа
+      example: "г. Москва, ул. Ленина, д. 1"
+    operational_status:
+      $ref: '#/LockerOperationalStatus'
+
+LockerListResponse:
+  type: object
+  description: |
+    Список шкафов с пагинацией.
+    Тип элементов в `items` зависит от query-параметра `view`:
+    без `view` — полный `Locker`, при `view=location` — `LockerLocation`.
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/Locker'
+          - $ref: '#/LockerLocation'
+    total:
+      type: integer
+      description: Общее количество записей (без учёта пагинации)
+      example: 150
+    limit:
+      type: integer
+      description: Максимальное количество записей на странице
+      example: 100
+    offset:
+      type: integer
+      description: Смещение от начала списка
+      example: 0
+
+BatchLockerRequest:
+  type: object
+  description: Запрос на получение информации о нескольких шкафах
+  required:
+    - locker_ids
+  properties:
+    locker_ids:
+      type: array
+      items:
+        $ref: './common_fields.yaml#/LockerId'
+      minItems: 1
+      maxItems: 100
+      description: Список UUID шкафов (не более 100)
+    view:
+      type: string
+      nullable: true
+      enum:
+        - brief
+        - location
+      description: |
+        Режим представления элементов в ответе.
+        `brief` — только id и inventory_number.
+        `location` — только id и геопозиция (lat/lon/address).
+        По умолчанию (поле опущено) возвращается полный объект Locker.
+
+BatchLockerResponse:
+  type: object
+  description: |
+    Результат батч-запроса шкафов.
+    Ключи — UUID шкафов. Несуществующие шкафы имеют значение null.
+    Тип значений зависит от `view` в запросе: без `view` — `Locker`,
+    при `view=brief` — `LockerBrief`, при `view=location` — `LockerLocation`.
+  required:
+    - items
+  properties:
+    items:
+      type: object
+      additionalProperties:
+        nullable: true
+        oneOf:
+          - $ref: '#/Locker'
+          - $ref: '#/LockerBrief'
+          - $ref: '#/LockerLocation'
+

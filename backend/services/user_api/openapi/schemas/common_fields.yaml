@@ -1,0 +1,123 @@
+# Общие переиспользуемые поля для всех схем OpenAPI
+# Используется для обеспечения консистентности и DRY-принципа
+
+# ============================================================================
+# Базовые типы ID
+# ============================================================================
+
+IdField:
+  type: integer
+  format: int64
+  minimum: 1
+  description: Уникальный идентификатор
+
+NullableIdField:
+  type: integer
+  format: int64
+  nullable: true
+  minimum: 1
+  description: Уникальный идентификатор (может быть null)
+
+# ============================================================================
+# Конкретные ID поля
+# ============================================================================
+
+UserId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор пользователя
+  minimum: 1
+  example: 123
+
+NullableUserId:
+  allOf:
+    - $ref: '#/UserId'
+    - nullable: true
+
+LockerId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор шкафа
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+ContractorId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор подрядчика
+  minimum: 1
+  example: 456
+
+NullableContractorId:
+  allOf:
+    - $ref: '#/ContractorId'
+    - nullable: true
+
+AccessId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор допуска
+  minimum: 1
+  example: 1
+
+RequestId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор заявки на экстренное открытие
+  minimum: 1
+  example: 42
+
+NullableRequestId:
+  allOf:
+    - $ref: '#/RequestId'
+    - nullable: true
+
+# ============================================================================
+# Массивы ID
+# ============================================================================
+
+LockerIdArray:
+  type: array
+  items:
+    $ref: '#/LockerId'
+  description: Список уникальных идентификаторов шкафов
+  example: ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440002"]
+
+# ============================================================================
+# Временные метки
+# ============================================================================
+
+Timestamp:
+  type: string
+  format: date-time
+  description: Дата и время в формате ISO 8601
+  example: "2024-01-15T10:30:00Z"
+
+NullableTimestamp:
+  allOf:
+    - $ref: '#/Timestamp'
+    - nullable: true
+
+# ============================================================================
+# Метаданные пагинации
+# ============================================================================
+
+PaginationTotal:
+  type: integer
+  description: Общее количество элементов (с учетом фильтров)
+  minimum: 0
+  example: 42
+
+PaginationLimit:
+  type: integer
+  description: Максимальное количество записей на странице
+  minimum: 1
+  maximum: 1000
+  default: 100
+  example: 100
+
+PaginationOffset:
+  type: integer
+  description: Смещение для пагинации (0-based)
+  minimum: 0
+  default: 0
+  example: 0

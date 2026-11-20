@@ -1,0 +1,92 @@
+<!-- Алерт критического уровня угрозы -->
+<div class="threat-alert-container" id="threatAlertContainer">
+    <div class="threat-alert">
+        <div class="threat-alert-header">
+            <div class="threat-alert-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="threat-alert-content">
+                <h3 class="threat-alert-title">Критические инциденты</h3>
+                <p class="threat-alert-description">
+                    <span class="threat-count" id="activeIncidentsCount">0</span> новых необработанных инцидента
+                </p>
+            </div>
+        </div>
+        <div class="threat-alert-actions">
+            <button class="btn-alert" id="markAllViewedBtn">
+                <i class="fas fa-eye"></i>
+                Отметить все
+            </button>
+            <button class="btn-alert-close" id="closeAlert">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Мониторинг безопасности</h2>
+            <p class="page-subtitle">Контроль периметра и реагирование на инциденты</p>
+        </div>
+        <div class="header-actions-row">
+            <div class="incidents-filter-group">
+                <button class="incidents-filter-btn active" data-filter="all">Все</button>
+                <button class="incidents-filter-btn" data-filter="new">Новые</button>
+            </div>
+            <div class="security-search-container">
+                <div class="security-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="incidentsSearch" placeholder="Поиск по объекту (ШК-144, ШК-12)">
+                    <button class="search-clear" id="clearIncidentsSearch">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <div class="incidents-feed" id="incidentsFeed">
+        <div class="incidents-header">
+            <h3>Инциденты безопасности</h3>
+            <span class="incidents-count" id="incidentsCount">0 инцидентов</span>
+        </div>
+
+        <div class="incidents-grid" id="incidentsGrid">
+            <!-- Инциденты загружаются динамически -->
+        </div>
+
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+                <i class="fas fa-shield-check"></i>
+            </div>
+            <h3>Нет активных инцидентов</h3>
+            <p>Все системы безопасности функционируют нормально</p>
+        </div>
+    </div>
+    <div class="pagination-container" id="paginationContainer" style="display:none;"></div>
+</div>
+
+<!-- Модальное окно подтверждения -->
+<div class="new-modal-overlay" id="confirmModal">
+    <div class="new-modal modal-sm">
+        <div class="modal-header">
+            <h3>Подтверждение действия</h3>
+            <button class="modal-close" id="closeConfirmModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <p id="confirmMessage">Вы уверены, что хотите отметить все инциденты как просмотренные?</p>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" id="cancelConfirmBtn">Отмена</button>
+            <button class="btn-primary" id="confirmActionBtn">Подтвердить</button>
+        </div>
+    </div>
+</div>

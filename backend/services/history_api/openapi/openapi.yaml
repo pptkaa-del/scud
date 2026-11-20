@@ -1,0 +1,315 @@
+openapi: 3.2.0
+
+info:
+  title: History API
+  description: |
+    API для долгосрочного хранения и аналитики исторических данных системы ScudDocs СКУД.
+
+    ## Назначение
+
+    History API обеспечивает:
+    - **Хранение телеметрии датчиков** - минимум 2 года данных (~5.26 млрд записей)
+    - **Журналирование событий безопасности** - нарушения, взломы, отключения
+    - **История команд** - полная история открытий/закрытий с данными пользователей
+    - **Хранение медиа-файлов** - фото и видео со шкафов (BYTEA в БД, привязка к событию)
+    - **Аналитика** - предрасчитанные агрегаты для быстрых отчетов
+
+    ## Получение фото и видео по событию взлома
+
+    Когда шкаф фиксирует взлом (`event_type=intrusion` или `door_tamper`),
+    он передаёт прикреплённые медиа-файлы. Чтобы их получить:
+
+    1. **Найти событие**:
+       `GET /api/v1/events/security?event_type=intrusion&locker_id=<UUID>`
+       → возвращает список событий, возьмите нужный `id`.
+
+    2. **Получить список медиа события**:
+       `GET /api/v1/events/security/{id}/media`
+       → возвращает массив `items` с метаданными (id, kind, mime_type,
+       size_bytes, captured_at, width/height/duration_ms).
+
+    3. **Скачать содержимое**:
+       `GET /api/v1/media/{media_id}`
+       → возвращает байты с заголовком `Content-Type` (image/jpeg,
+       image/png) — браузер откроет фото, либо сохраните как файл по
+       `Content-Disposition`.
+
+    Доступ к этим эндпоинтам — роль `operator` и выше.
+
+    ## Масштаб
+
+    - **Шкафов**: ~5000
+    - **Телеметрия**: ~167 записей/секунду (каждые 30 сек с каждого шкафа)
+    - **Хранение**: 2+ года
+    - **Объем данных**: ~5.26 млрд записей телеметрии за 2 года
+
+    ## Технологии
+
+    - **PostgreSQL 15** с партиционированием по месяцам
+    - **BRIN индексы** для эффективной работы с временными данными
+    - **Денормализация** для ускорения формирования отчетов
+    - **Предрасчитанные агрегаты** (hourly/daily/monthly) для аналитики
+
+    ## Аутентификация
+
+    - **Заголовок `X-Remote-User`** с ID пользователя
+    - Аутентификация выполняется на API Gateway
+    - History API доверяет прокинутому user-context (trust boundary)
+    - Некоторые эндпоинты (для locker_api) могут работать без аутентификации
+
+    ## Интеграция
+
+    - **Locker API** → автоматическая отправка телеметрии, истории команд, событий и медиа-файлов
+    - **User API** → формирование отчетов на основе исторических данных
+    - **Notification API** → оповещения о критических событиях (будущая интеграция)
+
+    ## Internal endpoints
+
+    Помимо публичных путей под `/api/v1`, history_api предоставляет внутренние
+    эндпойнты под префиксом `/internal/api/v1`, которые **закрыты снаружи через
+    Apache** (`<Location /internal> Require all denied`) и доступны только
+    backend-сервисам изнутри Docker-сети. Внутренние эндпойнты не требуют
+    `X-Remote-User` и используются продьюсерами locker_api для записи без
+    user-context (trust boundary смещён на сетевой уровень).
+
+    Полный контракт internal-эндпойнтов — `paths/internal.yaml`:
+    - `POST /internal/api/v1/events/security` — запись security-событий;
+    - `POST /internal/api/v1/telemetry` — batch-запись телеметрии;
+    - `GET /internal/api/v1/commands/history` — выборка истории команд для отчётов;
+    - `POST /internal/api/v1/commands/history` — upsert истории команды;
+    - `POST /internal/api/v1/media` — загрузка медиа-файла (multipart, фото или видео).
+
+  version: 1.1.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8002/api/v1
+    description: Local development server
+  - url: http://history_api:8002/api/v1
+    description: Docker development environment
+
+tags:
+  - name: Telemetry
+    description: Операции с телеметрией датчиков (партиционированное хранилище)
+  - name: Security Events
+    description: События безопасности (нарушения, взломы, отключения)
+  - name: Command History
+    description: История выполненных команд с денормализованными данными
+  - name: Media
+    description: Медиа-файлы шкафов (фото и видео)
+  - name: Analytics
+    description: Аналитика и агрегированные данные
+
+security:
+  - RemoteUser: []
+
+# =================================================================
+# API Paths
+# =================================================================
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+
+  /live:
+    get:
+      tags:
+        - internal
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - internal
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                required: [status, db]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+
+  # Telemetry
+  /telemetry:
+    $ref: './paths/telemetry.yaml#/telemetry_batch'
+
+  /telemetry/list:
+    $ref: './paths/telemetry.yaml#/telemetry_list'
+
+  # Security Events
+  /events/security:
+    $ref: './paths/security_events.yaml#/security_events_list'
+
+  /events/security/{eventId}:
+    $ref: './paths/security_events.yaml#/security_events_by_id'
+
+  # Command History
+  /commands/history:
+    $ref: './paths/command_history.yaml#/command_history_list'
+
+  # Media (фото и видео)
+  /media:
+    $ref: './paths/media.yaml#/media_list'
+
+  /media/{mediaId}:
+    $ref: './paths/media.yaml#/media_by_id'
+
+  /events/security/{eventId}/media:
+    $ref: './paths/media.yaml#/media_by_event'
+
+  # Analytics
+  /analytics/sensors:
+    $ref: './paths/analytics.yaml#/analytics_sensors'
+
+  /analytics/lockers/{lockerId}/summary:
+    $ref: './paths/analytics.yaml#/analytics_locker_summary'
+
+  # =====================================================================
+  # Internal endpoints (доступны только из Docker-сети, без X-Remote-User).
+  # На gateway закрыты `<Location /internal> Require all denied`.
+  # =====================================================================
+  /internal/api/v1/events/security:
+    $ref: './paths/internal.yaml#/internal_security_events'
+
+  /internal/api/v1/telemetry:
+    $ref: './paths/internal.yaml#/internal_telemetry'
+
+  /internal/api/v1/commands/history:
+    $ref: './paths/internal.yaml#/internal_command_history'
+
+  /internal/api/v1/media:
+    $ref: './paths/internal.yaml#/internal_media'
+
+# =================================================================
+# Reusable Components
+# =================================================================
+
+components:
+  securitySchemes:
+    $ref: './components/securitySchemes.yaml'
+
+  parameters:
+    $ref: './components/parameters.yaml'
+
+  responses:
+    $ref: './components/responses.yaml'
+
+  schemas:
+    # Common Fields
+    TelemetryId:
+      $ref: './schemas/common_fields.yaml#/TelemetryId'
+    EventId:
+      $ref: './schemas/common_fields.yaml#/EventId'
+    CommandHistoryId:
+      $ref: './schemas/common_fields.yaml#/CommandHistoryId'
+    AggregationId:
+      $ref: './schemas/common_fields.yaml#/AggregationId'
+    LockerId:
+      $ref: './schemas/common_fields.yaml#/LockerId'
+    SensorId:
+      $ref: './schemas/common_fields.yaml#/SensorId'
+    CommandId:
+      $ref: './schemas/common_fields.yaml#/CommandId'
+    UserId:
+      $ref: './schemas/common_fields.yaml#/UserId'
+    SensorTypeCode:
+      $ref: './schemas/common_fields.yaml#/SensorTypeCode'
+    Timestamp:
+      $ref: './schemas/common_fields.yaml#/Timestamp'
+    Metadata:
+      $ref: './schemas/common_fields.yaml#/Metadata'
+
+    # Errors
+    ProblemDetails:
+      $ref: './schemas/error.yaml#/ProblemDetails'
+
+    # Telemetry
+    SensorTelemetry:
+      $ref: './schemas/telemetry.yaml#/SensorTelemetry'
+    TelemetryReading:
+      $ref: './schemas/telemetry.yaml#/TelemetryReading'
+    TelemetryBatchRequest:
+      $ref: './schemas/telemetry.yaml#/TelemetryBatchRequest'
+    TelemetryBatchResponse:
+      $ref: './schemas/telemetry.yaml#/TelemetryBatchResponse'
+    TelemetryListResponse:
+      $ref: './schemas/telemetry.yaml#/TelemetryListResponse'
+
+    # Security Events
+    EventSeverity:
+      $ref: './schemas/security_event.yaml#/EventSeverity'
+    SecurityEvent:
+      $ref: './schemas/security_event.yaml#/SecurityEvent'
+    SecurityEventCreate:
+      $ref: './schemas/security_event.yaml#/SecurityEventCreate'
+    SecurityEventListResponse:
+      $ref: './schemas/security_event.yaml#/SecurityEventListResponse'
+
+    # Command History
+    CommandHistory:
+      $ref: './schemas/command_history.yaml#/CommandHistory'
+    CommandHistoryCreate:
+      $ref: './schemas/command_history.yaml#/CommandHistoryCreate'
+    CommandHistoryListResponse:
+      $ref: './schemas/command_history.yaml#/CommandHistoryListResponse'
+
+    # Media
+    MediaKind:
+      $ref: './schemas/media.yaml#/MediaKind'
+    LockerMedia:
+      $ref: './schemas/media.yaml#/LockerMedia'
+    MediaListResponse:
+      $ref: './schemas/media.yaml#/MediaListResponse'
+
+    # Analytics/Aggregations
+    AggregationType:
+      $ref: './schemas/aggregation.yaml#/AggregationType'
+    TelemetryAggregation:
+      $ref: './schemas/aggregation.yaml#/TelemetryAggregation'
+    AggregationListResponse:
+      $ref: './schemas/aggregation.yaml#/AggregationListResponse'

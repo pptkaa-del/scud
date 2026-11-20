@@ -1,0 +1,24 @@
+# Service backend user: full access to device topics
+user scud_backend
+topic readwrite stat
+topic readwrite rep
+topic readwrite com/#
+topic readwrite photos
+# Прошивки ПИВ v2 публикуют в <kind>/{id}; бэкенд подписан на обе схемы.
+topic readwrite stat/#
+topic readwrite rep/#
+topic readwrite photos/#
+topic read $SYS/#
+
+# Per-device template: a relay-{id} device may write shared stat/rep/photos
+# and read ONLY its own command topic com/{id} (id = %u suffix after "relay-").
+# Pattern %u = username. Device username is "relay-<id>"; firmware reads com/<id>.
+# Phase 1 keeps device write on shared topics; per-id com read is enforced per-user
+# at provisioning time (Plan 2 generates explicit per-user blocks). The pattern below
+# is the shared baseline applied to every authenticated non-backend user.
+pattern write stat
+pattern write rep
+pattern write photos
+# Per-id права (stat/{id} и т.д.) шаблоном не выразить: %u — это имя
+# пользователя relay-{id}, а не голый {id}. Их выписывает провижининг
+# поимённо, так же как topic read com/{id}.

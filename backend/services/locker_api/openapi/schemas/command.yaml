@@ -1,0 +1,198 @@
+Command:
+  type: object
+  description: Команда для шкафа
+  required:
+    - id
+    - locker_id
+    - type
+    - status
+    - created_at
+    - updated_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/CommandId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    type:
+      $ref: '#/CommandType'
+    parameters:
+      type: object
+      description: Параметры команды (произвольный JSON)
+      example:
+        duration: 5
+    status:
+      $ref: '#/CommandStatus'
+    result:
+      type: object
+      nullable: true
+      description: >-
+        Результат выполнения команды. При status=executed —
+        {"success": true, "message": "Command executed successfully"};
+        при status=failed — {"success": false, "message": "<причина>"}
+        (например "failed", "not_supported", "истёк срок ожидания ответа шкафа").
+        До получения ответа устройства (pending/sent/delivered) — пустой объект {}.
+      examples:
+        - success: true
+          message: "Command executed successfully"
+        - success: false
+          message: "истёк срок ожидания ответа шкафа"
+    error_message:
+      type: string
+      nullable: true
+      description: >-
+        Причина ошибки при status=failed: "failed" и "not_supported" (ответ шкафа),
+        "ack timeout, retries exhausted" (исчерпан retry-бюджет),
+        "истёк срок ожидания ответа шкафа" (истёк COMMAND_TTL_S).
+      example: "истёк срок ожидания ответа шкафа"
+    sent_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: Дата и время отправки команды на устройство
+    delivered_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: Дата и время доставки команды устройству
+    executed_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: Дата и время выполнения команды
+    failed_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - nullable: true
+          description: Дата и время ошибки выполнения команды
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Дата и время создания команды
+    created_by:
+      allOf:
+        - $ref: './common_fields.yaml#/UserId'
+        - nullable: true
+          description: ID пользователя, создавшего команду
+    retry_count:
+      type: integer
+      description: Текущее количество попыток отправки
+      example: 0
+    max_retries:
+      type: integer
+      description: Максимальное количество попыток отправки
+      example: 3
+
+CommandType:
+  type: string
+  description: |
+    Тип команды (значения в ответах и исторических записях). `config` — legacy:
+    выведен из эксплуатации и при создании не принимается (любая роль → 403),
+    но остаётся валидным значением в ранее записанных командах, возвращаемых API.
+    `relay_on` / `relay_off` / `relay_restart` — управление каналом блока реле,
+    канал в `parameters.relay`.
+  enum:
+    - open
+    - close
+    - reboot
+    - config
+    - relay_on
+    - relay_off
+    - relay_restart
+  example: open
+
+CommandStatus:
+  type: string
+  description: >-
+    Статус выполнения команды. executed/failed терминальны и неизменяемы.
+  enum:
+    - pending
+    - sent
+    - delivered
+    - executed
+    - failed
+  example: executed
+
+CommandCreate:
+  type: object
+  description: Данные для создания новой команды
+  required:
+    - type
+  properties:
+    type:
+      type: string
+      description: |
+        Тип создаваемой команды. `config` выведен из эксплуатации и не
+        принимается (любая роль → 403); полный набор значений в ответах — см.
+        CommandType.
+      enum:
+        - open
+        - close
+        - reboot
+        - relay_on
+        - relay_off
+        - relay_restart
+      example: open
+    parameters:
+      type: object
+      description: |
+        Параметры команды (опционально). Для `relay_*` обязательны и строго
+        равны `RelayCommandParameters`, иначе 422 `relay-invalid-parameters`.
+      example:
+        relay: 2
+    max_retries:
+      type: integer
+      description: Максимальное количество попыток отправки (по умолчанию 3)
+      example: 3
+
+CommandListResponse:
+  type: object
+  description: Список команд шкафа с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Command'
+    total:
+      type: integer
+      example: 312
+    limit:
+      type: integer
+      example: 100
+    offset:
+      type: integer
+      example: 0
+
+RelayCommandParameters:
+  type: object
+  description: Параметры relay-команды. Лишние поля запрещены; boolean не считается числом.
+  required: [relay]
+  additionalProperties: false
+  properties:
+    relay:
+      type: integer
+      minimum: 1
+      maximum: 4
+      description: Номер канала блока реле
+      example: 2
+
+RelayProblemType:
+  type: string
+  description: |
+    Значения `ProblemDetails.type` при отказе relay-команды
+    (`https://api.scuddocs.com/problems/<код>`):
+    - `relay-command-forbidden` (403) — роль не вправе управлять реле;
+    - `relay-channel-protected` (403) — защищённый канал, нужен administrator;
+    - `relay-block-absent` (409) — у шкафа нет блока реле или плата ещё не прислала stat;
+    - `board-offline` (409) — плата не на связи;
+    - `relay-channel-unavailable` (409) — канала нет, он скрыт или управление отключено;
+    - `relay-command-in-progress` (409) — на канале уже есть активная команда;
+    - `relay-invalid-parameters` (422) — `parameters` не `{"relay": 1..4}`.
+  enum:
+    - https://api.scuddocs.com/problems/relay-command-forbidden
+    - https://api.scuddocs.com/problems/relay-channel-protected
+    - https://api.scuddocs.com/problems/relay-block-absent
+    - https://api.scuddocs.com/problems/board-offline
+    - https://api.scuddocs.com/problems/relay-channel-unavailable
+    - https://api.scuddocs.com/problems/relay-command-in-progress
+    - https://api.scuddocs.com/problems/relay-invalid-parameters

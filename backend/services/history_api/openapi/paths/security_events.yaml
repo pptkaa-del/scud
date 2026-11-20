@@ -1,0 +1,185 @@
+security_events_list:
+  get:
+    summary: Получить список событий безопасности
+    description: |
+      Возвращает список событий безопасности с фильтрацией.
+      Включает нарушения пороговых значений, взломы, отключения и т.д.
+    operationId: getSecurityEventsList
+    tags:
+      - Security Events
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdQuery'
+      - $ref: '../components/parameters.yaml#/EventTypeQuery'
+      - $ref: '../components/parameters.yaml#/SeverityQuery'
+      - $ref: '../components/parameters.yaml#/ResolvedQuery'
+      - $ref: '../components/parameters.yaml#/FromDateQuery'
+      - $ref: '../components/parameters.yaml#/ToDateQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список событий безопасности
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/security_event.yaml#/SecurityEventListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать событие безопасности
+    description: |
+      Записывает новое событие безопасности в историю.
+
+      Типы событий (`event_type`):
+      - `threshold_violation` — выход показаний датчика за пороговые значения.
+        Автор: `state_monitor` (locker_api).
+      - `intrusion` — срабатывание датчика проникновения (`sensor_type_code='intrusion'`).
+        Автор: `state_monitor` (locker_api).
+      - `offline` — потеря связи со шкафом (MQTT). metadata содержит `reason`
+        (единственное допустимое значение — `heartbeat_timeout`) и `last_seen_at`.
+        Автор: MQTT ingest / offline-монитор (locker_api).
+      - `door_tamper` — срабатывание датчика вскрытия (`sensor_type_code='tamper'`).
+        Автор: `state_monitor` (locker_api).
+      - `command_2fa_issued` / `command_2fa_verified` / `command_2fa_failed` /
+        `command_2fa_mismatch` — аудит step-up подтверждения команд.
+        Авторы: auth_api (issued/verified/failed), locker_api (mismatch).
+      - `command_late_execution` — шкаф выполнил команду (`SUCCESS`) после того,
+        как она уже стала терминальной: `metadata.late_kind=after_failure` (успех
+        после `failed`, например по истечении TTL) или `replay` (повтор позже TTL
+        после `executed`, кроме `close`). Детерминированный `event_uid` схлопывает
+        дубли.
+        Автор: MQTT-путь результатов команд (locker_api), severity `high`.
+
+      Внутренние сервисы пишут события через `/internal/api/v1/events/security`
+      (без X-Remote-User), внешний доступ — через этот эндпойнт.
+    operationId: createSecurityEvent
+    tags:
+      - Security Events
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/security_event.yaml#/SecurityEventCreate'
+          examples:
+            threshold_violation:
+              summary: Нарушение пороговых значений датчика температуры
+              value:
+                locker_id: "11111111-1111-1111-1111-111111111111"
+                sensor_id: "22222222-2222-2222-2222-222222222222"
+                event_type: "threshold_violation"
+                severity: "high"
+                violated_thresholds:
+                  - description: "Temperature 45.0 exceeds max 35.0"
+                metadata:
+                  sensor_type_code: "temperature"
+                  raw_value: 45.0
+            intrusion:
+              summary: Срабатывание датчика проникновения
+              value:
+                locker_id: "11111111-1111-1111-1111-111111111111"
+                sensor_id: "33333333-3333-3333-3333-333333333333"
+                event_type: "intrusion"
+                severity: "high"
+                violated_thresholds:
+                  - description: "Intrusion sensor triggered"
+                metadata:
+                  sensor_type_code: "intrusion"
+                  raw_value: true
+            offline:
+              summary: Потеря связи со шкафом (heartbeat timeout)
+              value:
+                locker_id: "11111111-1111-1111-1111-111111111111"
+                event_type: "offline"
+                severity: "medium"
+                metadata:
+                  reason: "heartbeat_timeout"
+                  last_seen_at: "2026-04-29T10:15:23Z"
+            door_tamper:
+              summary: Срабатывание датчика вскрытия корпуса
+              value:
+                locker_id: "11111111-1111-1111-1111-111111111111"
+                sensor_id: "44444444-4444-4444-4444-444444444444"
+                event_type: "door_tamper"
+                severity: "critical"
+                violated_thresholds:
+                  - description: "Tamper sensor triggered"
+                metadata:
+                  sensor_type_code: "tamper"
+                  raw_value: true
+            command_late_execution:
+              summary: Команда выполнена шкафом после завершения с ошибкой
+              value:
+                locker_id: "11111111-1111-1111-1111-111111111111"
+                event_type: "command_late_execution"
+                severity: "high"
+                violated_thresholds:
+                  - description: "Команда «открыть» выполнена шкафом после того, как была завершена с ошибкой (ответ шкафа через 734 с после создания); в журнале команд остаётся «ОШИБКА»: истёк срок ожидания ответа шкафа"
+                metadata:
+                  late_kind: "after_failure"
+                  command_id: "55555555-5555-5555-5555-555555555555"
+                  command_type: "open"
+                  relay_cmd_id: 17
+                  created_by: 42
+                  created_at: "2026-10-04T12:00:00+00:00"
+                  failed_at: "2026-10-04T12:01:02+00:00"
+                  executed_at: null
+                  error_message: "истёк срок ожидания ответа шкафа"
+                  rep_received_at: "2026-10-04T12:12:14+00:00"
+                  delay_s: 734
+                event_uid: "6f1c2b7e-3a4d-5e6f-8a9b-0c1d2e3f4a5b"
+    responses:
+      '201':
+        description: Событие успешно создано
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/security_event.yaml#/SecurityEvent'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+security_events_by_id:
+  patch:
+    summary: Закрыть событие безопасности
+    description: >-
+      Помечает событие как разрешенное. Атрибуция (`resolved_by`) берётся из
+      аутентифицированного пользователя (заголовок `X-Remote-User`), тело
+      запроса не требуется. Операция идемпотентна: повторное закрытие уже
+      закрытого события возвращает 409 и не переписывает audit-trail.
+    operationId: resolveSecurityEvent
+    tags:
+      - Security Events
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/EventIdPath'
+    responses:
+      '200':
+        description: Событие успешно закрыто
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/security_event.yaml#/SecurityEvent'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'

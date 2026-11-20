@@ -1,0 +1,11 @@
+CookieAuth:
+  type: apiKey
+  in: cookie
+  name: access_token
+  description: |
+    Сессионный cookie `access_token`, устанавливается сервером после успешной
+    аутентификации (`/login` без 2FA или `/verify` после OTP).
+
+    Браузер отправляет cookie автоматически со всеми запросами.
+    Время жизни: 30 дней (конфигурируется через `ACCESS_TOKEN_TTL_HOURS`).
+    При логауте токен немедленно отзывается в БД.

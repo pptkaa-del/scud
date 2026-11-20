@@ -1,0 +1,760 @@
+/* logs.css */
+@import url('/libs/flatpickr/flatpickr.min.css');
+
+/* ─── Панель управления ─────────────────────────────────────────────────── */
+.logs-controls-panel {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+/* Группа фильтров (временной диапазон) */
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--dark-color);
+    margin-bottom: 4px;
+}
+
+/* Временной диапазон */
+.time-range {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.flatpickr-wrapper {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+.time-range input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+}
+
+.btn-time-preset {
+    padding: 6px 12px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.btn-time-preset:hover {
+    background: #e9ecef;
+}
+
+/* Активные фильтры */
+.active-filters {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.active-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.active-filter .filter-remove {
+    background: none;
+    border: none;
+    color: var(--gray-color);
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+}
+
+/* ─── Статистика ────────────────────────────────────────────────────────── */
+.logs-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    margin-top: 5px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: var(--gray-color);
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.stat-value.error   { color: var(--danger-color); }
+.stat-value.warning { color: var(--warning-color); }
+.stat-value.info    { color: var(--secondary-color); }
+
+/* ─── Терминал ──────────────────────────────────────────────────────────── */
+.logs-terminal-container {
+    background: #1a1a1a;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    margin-bottom: 20px;
+    border: 1px solid #333;
+}
+
+.terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+}
+
+.terminal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-weight: 500;
+}
+
+.terminal-title i {
+    color: var(--success-color);
+}
+
+.terminal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(39, 174, 96, 0.2);
+    color: var(--success-color);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.terminal-badge i {
+    font-size: 10px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+}
+
+/* Фильтр модулей (общий) */
+.module-filter {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+    min-height: 36px;
+    font-family: 'Courier New', monospace;
+}
+
+.module-filter option {
+    padding: 8px;
+}
+
+/* Фильтр модулей в терминале */
+.module-filter-terminal {
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    padding: 4px 8px;
+    height: 32px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.module-filter-terminal:hover  { border-color: #555; }
+.module-filter-terminal:focus  { outline: none; border-color: var(--secondary-color); }
+.module-filter-terminal option { background: #2d2d2d; color: #e9ecef; }
+
+select.module-filter option {
+    background: #2d2d2d;
+    color: #e9ecef;
+}
+
+.terminal-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-terminal {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px solid #404040;
+    background: #1a1a1a;
+    color: #ccc;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.btn-terminal:hover        { background: #2a2a2a; border-color: #555; }
+.btn-terminal.active       { background: var(--secondary-color); border-color: var(--secondary-color); color: white; }
+
+/* Контейнер с логами */
+.logs-terminal {
+    height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0;
+    background: #0a0a0a;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    scroll-behavior: smooth;
+}
+
+.logs-terminal::selection {
+    background: rgba(52, 152, 219, 0.3);
+    color: white;
+}
+
+/* Скроллбар терминала */
+.logs-terminal::-webkit-scrollbar        { width: 10px; }
+.logs-terminal::-webkit-scrollbar-track  { background: #1a1a1a; }
+.logs-terminal::-webkit-scrollbar-thumb  { background: #404040; border-radius: 5px; }
+.logs-terminal::-webkit-scrollbar-thumb:hover { background: #505050; }
+
+/* ─── Строки логов ──────────────────────────────────────────────────────── */
+.log-entry {
+    padding: 8px 20px;
+    border-bottom: 1px solid #1a1a1a;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 36px;
+    min-width: 900px;
+    flex-wrap: nowrap;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.log-entry:hover    { background: rgba(255, 255, 255, 0.05); }
+.log-entry.selected { background: rgba(52, 152, 219, 0.1); border-left: 3px solid var(--secondary-color); }
+
+.log-timestamp {
+    color: #6c757d;
+    min-width: 160px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    user-select: none;
+}
+
+.log-level {
+    min-width: 70px;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    user-select: none;
+}
+
+.level-error   { background: rgba(231, 76, 60, 0.15);   color: #ff6b6b; border: 1px solid rgba(231, 76, 60, 0.3); }
+.level-warning { background: rgba(243, 156, 18, 0.15);  color: #ffd93d; border: 1px solid rgba(243, 156, 18, 0.3); }
+.level-info    { background: rgba(52, 152, 219, 0.15);  color: #4dabf7; border: 1px solid rgba(52, 152, 219, 0.3); }
+
+/* Статусы команд */
+.level-executed  { background: rgba(39, 174, 96, 0.15);   color: #51cf66; border: 1px solid rgba(39, 174, 96, 0.3); }
+.level-delivered { background: rgba(0, 184, 212, 0.15);   color: #22d3ee; border: 1px solid rgba(0, 184, 212, 0.3); }
+.level-sent      { background: rgba(52, 152, 219, 0.15);  color: #4dabf7; border: 1px solid rgba(52, 152, 219, 0.3); }
+.level-pending   { background: rgba(108, 117, 125, 0.15); color: #adb5bd; border: 1px solid rgba(108, 117, 125, 0.3); }
+
+.log-module {
+    color: #adb5bd;
+    min-width: 80px;
+    font-family: 'Courier New', monospace;
+    font-weight: 500;
+    user-select: none;
+}
+
+.log-message {
+    color: #e9ecef;
+    flex: 1;
+    word-break: break-all;
+    white-space: pre-wrap;
+    font-family: 'Courier New', monospace;
+}
+
+/* Колонка шкафа */
+.log-locker {
+    color: #74c0fc;
+    min-width: 80px;
+    font-family: 'Courier New', monospace;
+    font-weight: 500;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+/* Колонка сенсора */
+.log-sensor {
+    color: #a9e34b;
+    min-width: 80px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* Данные порогового нарушения */
+.log-threshold {
+    color: #e9ecef;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    margin-right: 12px;
+}
+
+.log-threshold b { color: #ff6b6b; }
+
+/* Колонка пользователя */
+.log-user {
+    color: #c3fae8;
+    min-width: 120px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+/* Текст ошибки команды */
+.log-cmd-error { color: #ff6b6b; }
+
+/* Подсветка поиска */
+.highlight {
+    background: rgba(255, 255, 0, 0.3);
+    padding: 1px 2px;
+    border-radius: 2px;
+}
+
+/* Пустой терминал */
+.terminal-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6c757d;
+}
+
+.terminal-empty i { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.terminal-empty p { font-size: 14px; color: #adb5bd; }
+
+/* Футер терминала */
+.terminal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: #2d2d2d;
+    border-top: 1px solid #404040;
+    color: #adb5bd;
+    font-size: 12px;
+}
+
+.footer-info { font-family: 'Courier New', monospace; }
+
+.footer-stats {
+    display: flex;
+    align-items: center;
+}
+
+/* ─── Пагинация ─────────────────────────────────────────────────────────── */
+.pagination-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.page-size-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #6c757d;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+}
+
+.page-size-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.page-size-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 4px 22px 4px 8px;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    background: #1a1a1a;
+    color: #adb5bd;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    outline: none;
+    transition: var(--transition);
+}
+
+.page-size-select option               { background: #2d2d2d; color: #e9ecef; }
+.page-size-select:hover                { border-color: #555; }
+.page-size-select:focus                { border-color: var(--secondary-color); }
+
+.page-size-arrow {
+    position: absolute;
+    right: 6px;
+    pointer-events: none;
+    font-size: 8px;
+    color: #6c757d;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.pagination-btn {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    background: #1a1a1a;
+    color: #adb5bd;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #e9ecef;
+}
+
+.pagination-btn.active {
+    background: rgba(52, 152, 219, 0.2);
+    border-color: var(--secondary-color);
+    color: var(--secondary-color);
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.pagination-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.pagination-ellipsis {
+    padding: 0 2px;
+    color: #555;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    user-select: none;
+}
+
+/* ─── Модальное окно деталей лога ───────────────────────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1050;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-lg {
+    max-width: 860px;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--dark-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--gray-color);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.modal-close:hover { background: #f5f5f5; color: var(--dark-color); }
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Детали лога */
+.log-detail-view {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 20px;
+    color: #e9ecef;
+    font-family: 'Courier New', monospace;
+}
+
+.log-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #333;
+}
+
+.log-level-badge {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.log-detail-message {
+    background: #0a0a0a;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.log-detail-message pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.log-detail-meta {
+    background: #2d2d2d;
+    border-radius: 6px;
+    padding: 20px;
+}
+
+.meta-section { margin-bottom: 24px; }
+.meta-section:last-child { margin-bottom: 0; }
+
+.meta-section h4 {
+    color: #fff;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+
+.meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+}
+
+.meta-item { display: flex; flex-direction: column; gap: 4px; }
+
+.meta-label {
+    color: #adb5bd;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.meta-value {
+    color: #fff;
+    font-weight: 500;
+    font-size: 14px;
+    word-break: break-all;
+}
+
+.code-block {
+    background: #0a0a0a;
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+}
+
+.code-block pre {
+    margin: 0;
+    color: #e9ecef;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ─── Уведомления и утилиты ─────────────────────────────────────────────── */
+.notification.error { background-color: var(--danger-color); }
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--secondary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+.text-muted { color: #6c757d !important; }
+
+/* ─── Анимации ──────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ─── Адаптивность ──────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .logs-terminal { height: 400px; }
+
+    .logs-stats { grid-template-columns: repeat(2, 1fr); }
+
+    .time-range {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .time-range input { min-width: auto; }
+
+    .log-entry {
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px;
+        min-width: auto;
+    }
+
+    .log-timestamp,
+    .log-level,
+    .log-module { min-width: auto; }
+
+    .terminal-footer {
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+
+    .modal-body { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+    .logs-stats { grid-template-columns: 1fr; }
+
+    .log-detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}

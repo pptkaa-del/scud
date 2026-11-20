@@ -1,0 +1,45 @@
+# ScudDocs System Integration Tests
+#
+# Backend запускается отдельно:
+#   cd backend && docker compose up -d
+#
+# Запуск тестов (после старта backend):
+#   docker compose run --rm system_tests
+#
+# Запуск конкретного сценария:
+#   docker compose run --rm system_tests pytest -vv scenarios/test_relay_mqtt_e2e.py
+
+services:
+  system_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GATEWAY_URL=http://host.docker.internal
+      - ADMIN_PHONE=+79000000000
+      - ADMIN_PASSWORD=changeme
+      - TEST_TIMEOUT=180
+      # Relay MQTT e2e: scud_relay double talks to the broker (host :1883).
+      - MQTT_BROKER_HOST=host.docker.internal
+      - MQTT_BROKER_PORT=1883
+      # Make the vendored scud_relay package importable without pip (PyPI blocked).
+      - PYTHONPATH=/tests
+      - STATE_MONITOR_CHECK_INTERVAL_S=${STATE_MONITOR_CHECK_INTERVAL_S:-60}
+      - DEFAULT_TELEMETRY_INTERVAL_S=${DEFAULT_TELEMETRY_INTERVAL_S:-30}
+      # Включает сохранение артефактов теста в /artifacts (по умолчанию выкл).
+      - SAVE_ARTIFACTS=${SAVE_ARTIFACTS:-}
+    # Linux CI runners не разрешают host.docker.internal автоматически —
+    # пробрасываем шлюз хоста явно (на Windows/Mac работает и без этого).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # docker.sock пробрасываем read-only только в test-fixture, чтобы
+    # E2E-тесты могли проверять WARN-логи в логах сервисов через docker SDK.
+    # В production-стек этот mount НЕ попадает.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Артефакты теста (например, сгенерированные отчёты) — для ручного просмотра.
+      - ./artifacts:/artifacts
+      # Relay device double (scud_relay) — importable via PYTHONPATH=/tests.
+      # Read-only; gmqtt comes from requirements.txt (pip).
+      - ../../emulator/src/scud_relay:/tests/scud_relay:ro
+    entrypoint: ["pytest", "-vv", "--tb=short", "scenarios/"]

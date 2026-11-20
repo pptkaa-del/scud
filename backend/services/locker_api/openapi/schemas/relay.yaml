@@ -1,0 +1,143 @@
+RelayChannel:
+  type: integer
+  minimum: 1
+  maximum: 4
+  description: Номер канала блока реле (r1..r4 в stat платы)
+  example: 2
+
+RelayReportedState:
+  type: integer
+  nullable: true
+  enum: [0, 1, 2]
+  description: |
+    Фактическое состояние канала из последнего stat: 0 — выключено,
+    1 — включено, 2 — ошибка. null — плата ещё не сообщала.
+  example: 1
+
+RelayCommandType:
+  type: string
+  enum:
+    - relay_on
+    - relay_off
+    - relay_restart
+  example: relay_on
+
+RelayPendingCommand:
+  type: object
+  nullable: true
+  description: Незавершённая relay-команда на канале (pending/sent/delivered)
+  required: [id, type, status]
+  properties:
+    id:
+      $ref: './common_fields.yaml#/CommandId'
+    type:
+      $ref: '#/RelayCommandType'
+    status:
+      type: string
+      enum: [pending, sent, delivered]
+      example: sent
+
+RelayItem:
+  type: object
+  required:
+    - channel
+    - control_enabled
+    - is_protected
+    - is_active
+    - allowed_actions
+  properties:
+    channel:
+      $ref: '#/RelayChannel'
+    name:
+      type: string
+      nullable: true
+      maxLength: 100
+      example: null
+    purpose:
+      type: string
+      nullable: true
+      example: null
+    control_enabled:
+      type: boolean
+      description: Канал разрешено переключать командами
+      example: true
+    is_protected:
+      type: boolean
+      description: Управлять каналом может только administrator
+      example: false
+    is_active:
+      type: boolean
+      description: false — канал скрыт (soft-скрытие)
+      example: true
+    reported_state:
+      $ref: '#/RelayReportedState'
+    changed_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    allowed_actions:
+      type: array
+      description: |
+        Relay-команды, доступные ТЕКУЩЕМУ пользователю на этом канале (роль +
+        политика канала + наличие блока). Пусто — управлять нельзя (например,
+        у worker). Связность платы не учитывается — см. `connectivity`.
+      items:
+        $ref: '#/RelayCommandType'
+      example: [relay_on, relay_off, relay_restart]
+    pending_command:
+      $ref: '#/RelayPendingCommand'
+
+RelayListResponse:
+  type: object
+  required:
+    - locker_id
+    - connectivity
+    - items
+  properties:
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    has_relays:
+      type: boolean
+      nullable: true
+      description: Есть ли блок реле у платы; null — stat ещё не приходил
+      example: true
+    board_version:
+      type: integer
+      nullable: true
+      minimum: 1
+      maximum: 2
+      example: 2
+    connectivity:
+      $ref: './locker.yaml#/LockerConnectivity'
+    reported_at:
+      allOf:
+        - $ref: './common_fields.yaml#/NullableTimestamp'
+        - description: Время последнего stat платы (last_seen_at шкафа)
+    items:
+      type: array
+      description: Каналы по возрастанию номера; пусто, пока плата не прислала stat с блоком реле
+      items:
+        $ref: '#/RelayItem'
+
+RelayUpdate:
+  type: object
+  description: |
+    Настройки канала. Передаются только изменяемые поля; хотя бы одно обязательно.
+    null допустим только у `name` и `purpose` (очистка). Неизвестные поля — 422.
+  additionalProperties: false
+  minProperties: 1
+  properties:
+    name:
+      type: string
+      nullable: true
+      maxLength: 100
+    purpose:
+      type: string
+      nullable: true
+    control_enabled:
+      type: boolean
+    is_protected:
+      type: boolean
+    is_active:
+      type: boolean
+  example:
+    name: "Насос"
+    is_protected: true

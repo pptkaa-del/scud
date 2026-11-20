@@ -1,0 +1,57 @@
+# Обновление сервера из GitHub одной кнопкой: Actions -> Deploy -> Run workflow.
+# Сервер должен быть один раз установлен через install.sh (см. README.md).
+#
+# Секреты репозитория (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST      адрес сервера (IP или имя)
+#   DEPLOY_USER      пользователь SSH (root или с sudo без пароля)
+#   DEPLOY_SSH_KEY   приватный SSH-ключ этого пользователя
+#   DEPLOY_PORT      необязательно, порт SSH (по умолчанию 22)
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ветка, тег или коммит"
+        required: true
+        default: main
+      skip_backup:
+        description: "Не делать дамп БД перед обновлением"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: SSH key
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          test -n "$SSH_KEY" && test -n "$HOST" || { echo "Задайте секреты DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${PORT:-22}" "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: deploy.sh update
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          REF: ${{ inputs.ref }}
+          SKIP: ${{ inputs.skip_backup && '--skip-backup' || '' }}
+        run: |
+          [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "недопустимый ref: $REF"; exit 1; }
+          ssh -i ~/.ssh/id_deploy -p "${PORT:-22}" -o BatchMode=yes "$USER_@$HOST" \
+            "sudo -n /opt/scud/backend/scripts/deploy.sh update --dir /opt/scud --ref '$REF' -y $SKIP"

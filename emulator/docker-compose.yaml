@@ -1,0 +1,25 @@
+# ScudDocs relay-board device emulator (headless MQTT device double).
+#
+# Запуск unit-тестов relay-двойника:
+#   docker compose --profile tests run --rm emulator_tests
+#
+# Запуск флота relay-устройств вручную (нужен доступный MQTT-брокер):
+#   pip install -e ".[all]"
+#   scud relay run --count 10 --host <broker-host> --port 1883 --base-id 5001
+#
+# System-e2e (tests/system) НЕ поднимает этот стек: relay-двойник монтируется
+# в system_tests из src/scud_relay напрямую (см. tests/system/docker-compose.yaml).
+
+services:
+  # Тесты relay-двойника (запускать через: docker compose --profile tests run --rm emulator_tests)
+  emulator_tests:
+    profiles: [tests]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["pytest", "-vv", "tests/"]
+    volumes:
+      - ./tests:/app/tests
+      # reference/ holds golden_vectors.py + protocol_structures.h that the relay
+      # tests import via sys.path; mount it (the image COPYs only src/).
+      - ./reference:/app/reference

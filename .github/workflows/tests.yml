@@ -1,0 +1,331 @@
+name: tests
+
+on:
+  push:
+    branches: [main, backend-dev]
+  pull_request:
+    branches: [main, backend-dev]
+
+# Force Node.js 24 runtime for any JavaScript action that hasn't been
+# upgraded yet. Node.js 20 deprecated by GitHub Actions starting 2026-06-02
+# and removed 2026-09-16. actions/checkout@v5 уже на Node 24, но env var
+# страхует от попадания старых v4 через transitive dependencies (composite
+# actions). См. https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # Статический анализ: ruff (max ruleset) + mypy --strict + bandit (Python),
+  # sqlfluff (миграции), hadolint (Dockerfile), shellcheck (bash), luacheck
+  # (Apache mod_lua gateway). Конфиги — корневые pyproject.toml, .hadolint.yaml,
+  # .luacheckrc, .shellcheckrc. Все линтеры гоняются ВНУТРИ образа из
+  # backend/linters/Dockerfile (единый источник версий) через compose-сервис
+  # `linters` — на хосте/раннере ничего не ставится. Образ не попадает в Astra
+  # production-сборку (lint-тулинг). Источники монтируются read-only в /repo.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - name: Build lint image
+        run: docker compose --profile lint build linters
+      - name: ruff
+        if: always()
+        run: docker compose --profile lint run --rm linters ruff check backend/services backend/shared
+      # mypy запускается per-service: каждый сервис имеет свой пакет `app.*`,
+      # и общий mypy_path их не различает. shared проверяется отдельно.
+      # `--strict` зашит в pyproject.toml вместе с disable_error_code; передавать
+      # его дополнительно из CLI не нужно (CLI может перебить disable_error_code).
+      # MYPYPATH=/repo/backend задан в compose-сервисе `linters`, чтобы
+      # `shared.*` импорты разрешались. cwd переопределяется на пакет сервиса.
+      - name: mypy (per service + shared)
+        if: always()
+        run: |
+          rc=0
+          for svc in user_api locker_api history_api auth_api acm notification_api reports_api; do
+            echo "::group::mypy $svc"
+            docker compose --profile lint run --rm --workdir "/repo/backend/services/$svc" linters \
+              mypy --config-file /repo/pyproject.toml app || rc=$?
+            echo "::endgroup::"
+          done
+          echo "::group::mypy shared"
+          docker compose --profile lint run --rm --workdir /repo/backend linters \
+            mypy --config-file /repo/pyproject.toml shared || rc=$?
+          echo "::endgroup::"
+          exit $rc
+      - name: bandit
+        if: always()
+        run: docker compose --profile lint run --rm linters bandit -r backend/services backend/shared -c pyproject.toml
+      - name: sqlfluff
+        if: always()
+        run: docker compose --profile lint run --rm linters sqlfluff lint backend/services --dialect postgres
+      # Globs (*/Dockerfile, *.sh) раскрываются ВНУТРИ контейнера (cwd=/repo),
+      # поэтому оборачиваем в `sh -c` — иначе раннер раскрыл бы их относительно
+      # working-directory: backend и пути не совпали бы с /repo.
+      - name: hadolint
+        if: always()
+        run: docker compose --profile lint run --rm linters sh -c "hadolint backend/services/*/Dockerfile backend/gateway/Dockerfile backend/tests/gateway/Dockerfile backend/Dockerfile.backup backend/mqtt/Dockerfile backend/mqtt-tls/Dockerfile backend/pgbouncer/Dockerfile backend/shared/Dockerfile.tests backend/linters/Dockerfile backend/tools/max-otp-realtest/Dockerfile monitoring/zabbix-server/Dockerfile monitoring/zabbix-web/Dockerfile monitoring/zabbix-agent2/Dockerfile monitoring/syslog-ng/Dockerfile monitoring/wg-gateway/Dockerfile"
+      - name: shellcheck
+        if: always()
+        run: docker compose --profile lint run --rm linters sh -c "shellcheck backend/scripts/*.sh backend/scripts/tests/*.sh backend/mqtt/*.sh backend/pgbouncer/*.sh backend/gateway/entrypoint.sh backend/init-scripts/*.sh monitoring/zabbix-*/*.sh monitoring/syslog-ng/*.sh monitoring/wg-gateway/entrypoint.sh monitoring/wg-gateway/test_build.sh"
+      - name: deploy.sh unit tests
+        if: always()
+        run: docker run --rm -v "$PWD/..:/repo:ro" bash:5 sh -c 'apk add --no-cache git coreutils openssl >/dev/null && bash /repo/backend/scripts/tests/test_deploy.sh'
+      - name: schema upgrade blocks
+        if: always()
+        run: bash ../backend/scripts/tests/test_schema_upgrade.sh
+      - name: luacheck
+        if: always()
+        run: docker compose --profile lint run --rm linters luacheck backend/gateway/lua/
+      # haproxy.cfg валидируется бинарём 2.6.23 из сертифицированного main:
+      # образ линтеров — Debian с haproxy 3.x, синтаксис расходится.
+      - name: mqtt-tls (haproxy config + TLS handshake)
+        if: always()
+        run: |
+          docker compose --profile tests build mqtt_tls_tests
+          docker compose --profile tests run --rm mqtt_tls_tests
+      # Сверка ACL тома с дефолтами образа: без неё правка прав в образе молча
+      # не доезжает до уже развёрнутого брокера.
+      - name: mqtt (ACL reconcile)
+        if: always()
+        run: |
+          docker compose --profile tests build mqtt_tests
+          docker compose --profile tests run --rm mqtt_tests
+      # OpenAPI well-formedness: every service spec must parse as OpenAPI 3.2.0
+      # and resolve all (incl. cross-file) $ref. redocly 2.x is the only
+      # validator we found that handles 3.2.0 + multifile $ref. Ruleset is
+      # well-formedness only (backend/redocly.yaml) — not a style gate.
+      - name: openapi (redocly)
+        if: always()
+        run: docker compose --profile lint run --rm linters sh -c 'rc=0; for spec in backend/services/*/openapi/openapi.yaml; do echo "::group::redocly lint $spec"; redocly lint "$spec" --config backend/redocly.yaml || rc=1; echo "::endgroup::"; done; exit $rc'
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    # docker-compose.yaml secure-by-default (SECURE_COOKIES=${SECURE_COOKIES:-true}).
+    # auth_api_tests ходит к живому auth_api по plain HTTP внутри backend_net и
+    # полагается на автопересылку access_token cookie между запросами одной
+    # requests.Session (см. tests/integration/conftest.py); Secure-cookie клиент
+    # не резолвит обратно на HTTP-соединении. Явно понижаем для CI.
+    env:
+      SECURE_COOKIES: "false"
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user_api, locker_api, history_api, auth_api, notification_api, acm, reports_api, shared]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Seed dev secrets
+        # postgres_user использует POSTGRES_PASSWORD_FILE; bind-mount
+        # secrets/* требует существующих файлов (gitignored, поэтому
+        # свежий clone их не имеет — нужно создать дев-дефолты в CI).
+        run: bash backend/scripts/seed-dev-secrets.sh
+      - name: Prepare coverage volume
+        # Директория монтируется в *_tests контейнер (test-stage Dockerfile,
+        # python3-coverage из Astra extended; не попадает в production).
+        # Owner uid контейнера = root → создаём заранее как root, иначе
+        # docker bind-mount создаёт с правами host-юзера.
+        run: |
+          mkdir -p backend/.coverage-data/${{ matrix.service }}
+          chmod 777 backend/.coverage-data/${{ matrix.service }}
+      - name: Run ${{ matrix.service }} tests
+        run: |
+          cd backend
+          docker compose --profile tests up --build --abort-on-container-exit ${{ matrix.service }}_tests
+        timeout-minutes: 20
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          cd backend
+          echo "::group::ps"
+          docker compose ps -a || true
+          echo "::endgroup::"
+          for svc in postgres_user postgres_locker postgres_history postgres_auth postgres_notification postgres_reports redis user_api locker_api history_api auth_api acm notification_api reports_api; do
+            echo "::group::logs $svc"
+            docker compose logs --tail=200 "$svc" 2>&1 || true
+            echo "::endgroup::"
+          done
+      - name: Combine + report coverage for ${{ matrix.service }}
+        if: always()
+        # cwd=backend/ (унификация с остальными шагами); `[tool.coverage.paths]`
+        # в pyproject.toml содержит target-пути относительно backend/ именно
+        # под этот cwd. `--keep` сохраняет per-service `.coverage.<svc>` для
+        # следующего job-а (artifact → coverage-combine); без `--keep`
+        # `coverage combine` удаляет исходники, артефакт получает только
+        # coverage.xml, и общий combine job остаётся без данных.
+        #
+        # Strategy A: per-service шаг — диагностический, НЕ гейт. `--fail-under=0`
+        # перебивает `fail_under=59` из pyproject.toml, иначе любой сервис ниже
+        # среднего combined-показателя (напр. xlsx/vendor-тяжёлый) ронял бы свой
+        # собственный шаг exit-кодом 2. ВАЖНО: `coverage xml` тоже читает
+        # `fail_under` и падает exit-кодом 2 ещё до `report`, поэтому `--fail-under=0`
+        # обязателен на ОБЕИХ командах, а не только на `report`. Реальный анти-регресс-гейт
+        # — combined шаг в job-е coverage-combine, который читает fail_under из pyproject.toml.
+        run: |
+          python -m pip install --upgrade pip
+          pip install coverage==7.6.4
+          cd backend
+          if compgen -G ".coverage-data/${{ matrix.service }}/.coverage*" > /dev/null; then
+            coverage combine --keep --rcfile=../pyproject.toml .coverage-data/${{ matrix.service }}/.coverage*
+            coverage xml --rcfile=../pyproject.toml --fail-under=0 -o .coverage-data/${{ matrix.service }}/coverage.xml
+            coverage report --rcfile=../pyproject.toml --fail-under=0
+          else
+            echo "::warning::no coverage data produced for ${{ matrix.service }}"
+          fi
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-${{ matrix.service }}
+          path: backend/.coverage-data/${{ matrix.service }}/
+          # The `.coverage.<svc>` data file is a dotfile; upload-artifact@v4
+          # excludes hidden files by default (since v4.4), so without this the
+          # artifact ships only coverage.xml and coverage-combine finds no
+          # `.coverage*` data to merge.
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Объединяет coverage от всех 8 job-ов (7 сервисов + shared) в единый отчёт.
+  # Загружает артефакты, делает `coverage combine` + xml/html, публикует.
+  coverage-combine:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    if: always()
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Install coverage
+        run: pip install coverage==7.6.4
+      - name: Download per-service coverage artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: backend/.coverage-data/
+          pattern: coverage-*
+          merge-multiple: false
+      - name: Combine all services
+        run: |
+          cd backend
+          # Каждый артефакт лежит в .coverage-data/coverage-<svc>/.coverage[.<host>.<pid>...].
+          # find явно матчит только coverage data files (`.coverage`/`.coverage.<host>.<pid>`),
+          # игнорируя per-service `coverage.xml` и любые будущие интермедиаты.
+          mapfile -t cov_files < <(find .coverage-data \( -name '.coverage' -o -name '.coverage.*' \))
+          if [ "${#cov_files[@]}" -eq 0 ]; then
+            # Все 8 job-ов упали до записи coverage. Не падаем — backend-tests
+            # job уже сам отметился как failed, мы выдаём warning и пропускаем
+            # combine (иначе `coverage report` упал бы с "No data to report"
+            # и затёр бы реальную причину провала в job summary).
+            echo "::warning::no coverage data files from any service — skipping combine"
+            exit 0
+          fi
+          printf '%s\n' "${cov_files[@]}"
+          coverage combine --rcfile=../pyproject.toml "${cov_files[@]}"
+          coverage report --rcfile=../pyproject.toml
+          coverage xml --rcfile=../pyproject.toml -o coverage.combined.xml
+          coverage html --rcfile=../pyproject.toml -d htmlcov
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-combined
+          path: |
+            backend/coverage.combined.xml
+            backend/htmlcov/
+          retention-days: 30
+
+  gateway-tests:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    # SECURE_COOKIES=false: gateway_tests логинится через apache_gateway по
+    # plain HTTP и переиспользует cookie-сессию между запросами — см. то же
+    # обоснование, что и в job-е backend-tests выше.
+    env:
+      SECURE_COOKIES: "false"
+      # Без этого монтируется дефолт ${FRONTEND_PATH:-/root/frontend}, которого
+      # на раннере нет: docker создаёт пустые каталоги, и вся статика отдаёт 500.
+      # Префикс ./ обязателен — иначе compose примет значение за имя тома.
+      FRONTEND_PATH: ./tests/gateway/fixtures/frontend
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Seed dev secrets
+        run: bash backend/scripts/seed-dev-secrets.sh
+      - name: Run gateway tests
+        run: |
+          cd backend
+          docker compose --profile tests up --build --abort-on-container-exit gateway_tests
+        timeout-minutes: 20
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          cd backend
+          echo "::group::ps"
+          docker compose ps -a || true
+          echo "::endgroup::"
+          for svc in apache_gateway user_api auth_api acm reports_api postgres_user postgres_auth gateway_tests; do
+            echo "::group::logs $svc"
+            docker compose logs --tail=200 "$svc" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+  emulator-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Run emulator unit tests
+        run: |
+          cd emulator
+          docker compose --profile tests run --rm --build emulator_tests
+        timeout-minutes: 15
+
+  # Monitoring (Zabbix/agent2/syslog-ng) unit tests. The harness is stdlib
+  # pytest + pyyaml (mock urllib/subprocess, structural YAML/config checks) and
+  # is OUTSIDE Astra certification, like tests/system — so it runs on a plain
+  # python:3.13-slim, not the certified images. Previously these tests ran
+  # nowhere in CI.
+  monitoring-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Run monitoring unit tests
+        run: |
+          docker run --rm -v "$PWD":/w -w /w python:3.13-slim \
+            sh -c "pip install -q pytest pyyaml && pytest -q monitoring/zabbix/tests monitoring/zabbix-agent2/tests monitoring/syslog-ng"
+        timeout-minutes: 10
+
+  system-e2e:
+    runs-on: ubuntu-latest
+    needs: [gateway-tests, emulator-tests]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Seed dev secrets
+        run: bash backend/scripts/seed-dev-secrets.sh
+
+      - name: Start backend stack (fast-mode)
+        run: |
+          cd backend
+          docker compose --env-file .env.fast up -d --build --wait
+        timeout-minutes: 10
+
+      - name: Run system E2E tests (fast-mode)
+        run: |
+          cd tests/system
+          docker compose --env-file .env.fast run --rm --build system_tests
+        timeout-minutes: 30
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: |
+          cd backend
+          docker compose logs --tail=300 || true
+
+      - name: Tear down stacks
+        if: always()
+        run: |
+          cd tests/system && docker compose down -v --remove-orphans || true
+          cd ../backend && docker compose down -v --remove-orphans || true

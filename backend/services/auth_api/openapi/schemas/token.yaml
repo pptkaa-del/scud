@@ -1,0 +1,46 @@
+LoginSuccessResponse:
+  type: object
+  description: |
+    Ответ при успешной аутентификации: login без 2FA (require_2fa=false)
+    либо шаг 2 `/verify`. Несёт имя и роль для маршрутизации фронта.
+  required:
+    - message
+    - name
+    - role
+  properties:
+    message:
+      type: string
+      description: Информационное сообщение о результате операции
+      example: "Authentication successful"
+    name:
+      type: string
+      description: Полное имя пользователя
+      example: "Иванов Иван Иванович"
+    role:
+      type: string
+      description: Роль пользователя
+      enum: [worker, operator, administrator]
+      example: "administrator"
+
+AuthMessageResponse:
+  type: object
+  description: Ответ с информационным сообщением
+  required:
+    - message
+  properties:
+    message:
+      type: string
+      description: Информационное сообщение о результате операции
+      example: "Authentication successful"
+
+OtpSentResponse:
+  type: object
+  description: |
+    Ответ при отправке OTP (2FA включена).
+  required:
+    - message
+  properties:
+    message:
+      type: string
+      description: Информационное сообщение
+      example: "OTP has been sent"

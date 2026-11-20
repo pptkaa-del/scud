@@ -1,0 +1,112 @@
+# =================================================================
+# ID Fields
+# =================================================================
+
+TelemetryId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор записи телеметрии
+  example: 123456789
+
+EventId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор события безопасности
+  example: 12345
+
+CommandHistoryId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор записи истории команд
+  example: 45678
+
+AggregationId:
+  type: integer
+  format: int64
+  description: Уникальный идентификатор агрегата
+  example: 999
+
+LockerId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор шкафа (UUID)
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+SensorId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор датчика (UUID)
+  example: "660e8400-e29b-41d4-a716-446655440111"
+
+CommandId:
+  type: string
+  format: uuid
+  description: Уникальный идентификатор команды (UUID)
+  example: "880e8400-e29b-41d4-a716-446655440333"
+
+UserId:
+  type: integer
+  format: int64
+  nullable: true
+  description: Идентификатор пользователя (может быть null)
+  example: 123
+
+# =================================================================
+# Common Types
+# =================================================================
+
+SensorTypeCode:
+  type: string
+  description: Код типа датчика
+  examples:
+    - "temperature"
+    - "humidity"
+    - "power"
+    - "door"
+    - "shock"
+    - "intrusion"
+  example: "temperature"
+
+Timestamp:
+  type: string
+  format: date-time
+  description: Временная метка в формате ISO 8601 с timezone (UTC)
+  example: "2024-03-18T10:30:00Z"
+
+Metadata:
+  type: object
+  description: Дополнительные метаданные в формате JSON
+  additionalProperties: true
+  example:
+    source: "device"
+    version: "1.0"
+
+# =================================================================
+# Nullable Variants
+# =================================================================
+
+NullableTimestamp:
+  type: string
+  format: date-time
+  nullable: true
+  description: Временная метка (может быть null)
+  example: "2024-03-18T10:30:00Z"
+
+NullableString:
+  type: string
+  nullable: true
+  description: Строковое значение (может быть null)
+
+NullableNumber:
+  type: number
+  format: double
+  nullable: true
+  description: Числовое значение (может быть null)
+  example: 25.5
+
+NullableSensorId:
+  type: string
+  format: uuid
+  nullable: true
+  description: ID датчика (может быть null)
+  example: "660e8400-e29b-41d4-a716-446655440111"

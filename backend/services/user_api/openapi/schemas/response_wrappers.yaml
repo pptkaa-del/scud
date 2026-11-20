@@ -1,0 +1,75 @@
+UserListResponse:
+  type: object
+  description: Список пользователей с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: './user.yaml#/User'
+    total:
+      type: integer
+      description: Общее количество записей (без учёта пагинации)
+      example: 150
+    limit:
+      type: integer
+      description: Максимальное количество записей на странице
+      example: 100
+    offset:
+      type: integer
+      description: Смещение от начала списка
+      example: 0
+
+ContractorListResponse:
+  type: object
+  description: Список подрядчиков с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: './contractor.yaml#/Contractor'
+    total:
+      type: integer
+      description: Общее количество записей (без учёта пагинации)
+      example: 12
+    limit:
+      type: integer
+      description: Максимальное количество записей на странице
+      example: 100
+    offset:
+      type: integer
+      description: Смещение от начала списка
+      example: 0
+
+EmergencyRequestLogListResponse:
+  type: array
+  description: История действий с заявкой
+  items:
+    $ref: './emergency_request.yaml#/EmergencyRequestLog'
+
+Enable2FAInviteResponse:
+  type: object
+  description: >
+    Ответ при включении 2FA, когда Max-аккаунт ещё не привязан:
+    содержит свежую invite-ссылку для привязки бота.
+  required: [user_id, require_2fa, max_bound, max_invite_token, max_invite_expires_at]
+  properties:
+    user_id:
+      type: integer
+      format: int64
+      example: 123
+    require_2fa:
+      type: boolean
+      example: true
+    max_bound:
+      type: boolean
+      example: false
+    max_invite_token:
+      type: string
+    max_invite_link:
+      type: string
+      nullable: true
+    max_invite_expires_at:
+      type: string
+      format: date-time

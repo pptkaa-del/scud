@@ -1,0 +1,122 @@
+relays:
+  get:
+    summary: Каналы блока реле шкафа
+    description: |
+      Фактические состояния каналов r1..r4 из последнего stat платы, их
+      настройки, доступные текущему пользователю действия и незавершённая
+      команда на каждом канале. Строки каналов появляются после первого stat
+      с блоком реле; до этого `items` пуст.
+
+      Доступ: worker+ (worker — только при Допуске на шкаф). Управление каналом —
+      `POST /locker/{lockerId}/commands` с типом `relay_on`/`relay_off`/`relay_restart`
+      и `parameters: {"relay": N}`.
+    operationId: getLockerRelays
+    tags:
+      - Relays
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    responses:
+      '200':
+        description: Блок реле шкафа
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/relay.yaml#/RelayListResponse'
+            example:
+              locker_id: "550e8400-e29b-41d4-a716-446655440000"
+              has_relays: true
+              board_version: 2
+              connectivity: online
+              reported_at: "2026-11-05T12:00:00+00:00"
+              items:
+                - channel: 1
+                  name: null
+                  purpose: null
+                  control_enabled: true
+                  is_protected: false
+                  is_active: true
+                  reported_state: 1
+                  changed_at: "2026-11-05T11:58:10+00:00"
+                  allowed_actions: [relay_on, relay_off, relay_restart]
+                  pending_command:
+                    id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                    type: relay_off
+                    status: sent
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        description: Нет Допуска на шкаф (worker)
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+relays_by_channel:
+  patch:
+    summary: Изменить настройки канала реле
+    description: |
+      Только administrator. Меняет подпись, назначение и политику канала:
+      `control_enabled=false` запрещает команды на канал, `is_protected=true`
+      оставляет управление только администратору, `is_active=false` скрывает канал.
+    operationId: updateLockerRelay
+    tags:
+      - Relays
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - name: channel
+        in: path
+        required: true
+        description: Номер канала (1..4); другие значения — 404
+        schema:
+          $ref: '../schemas/relay.yaml#/RelayChannel'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/relay.yaml#/RelayUpdate'
+    responses:
+      '200':
+        description: Канал после изменения
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/relay.yaml#/RelayItem'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '403':
+        description: Роль не administrator
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '404':
+        description: Шкаф не найден или у шкафа нет такого канала (stat с блоком реле ещё не приходил)
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '422':
+        description: Неверное тело (неизвестное поле, неверный тип, null у булева поля, пустое тело)
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+            example:
+              type: "https://api.scuddocs.com/problems/validation-error"
+              title: "Validation Error"
+              status: 422
+              detail: "is_active must not be null"
+              instance: "/api/v1/locker/550e8400-e29b-41d4-a716-446655440000/relays/2"
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

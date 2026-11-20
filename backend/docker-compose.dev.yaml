@@ -1,0 +1,68 @@
+# Dev-overlay: открывает порты сервисов и БД на 127.0.0.1 через socat-proxy
+# в отдельном контейнере. Production docker-compose.yaml держит все backend-
+# контейнеры закрытыми; единственная внешняя точка входа — apache_gateway:80.
+#
+# Использование:
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+#
+# После запуска IDE/psql/curl с хоста ходят на:
+#   - 127.0.0.1:8000-8005 → user_api/locker_api/history_api/auth_api/acm/notification_api
+#   - 127.0.0.1:8006       → reports_api
+#   - 127.0.0.1:5432-5436 → postgres_user/_locker/_history/_auth/_notification
+#   - 127.0.0.1:5437       → postgres_reports
+#
+# Контейнер не должен использоваться в продакшене — это дыра ради удобства dev.
+
+services:
+  dev_proxy:
+    image: alpine/socat:latest
+    container_name: scud_dev_proxy
+    depends_on:
+      - user_api
+      - locker_api
+      - history_api
+      - auth_api
+      - acm
+      - notification_api
+      - reports_api
+      - postgres_user
+      - postgres_locker
+      - postgres_history
+      - postgres_auth
+      - postgres_notification
+      - postgres_reports
+    networks:
+      - backend_net
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
+      - "127.0.0.1:8003:8003"
+      - "127.0.0.1:8004:8004"
+      - "127.0.0.1:8005:8005"
+      - "127.0.0.1:8006:8006"
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5433"
+      - "127.0.0.1:5434:5434"
+      - "127.0.0.1:5435:5435"
+      - "127.0.0.1:5436:5436"
+      - "127.0.0.1:5437:5437"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        socat TCP-LISTEN:8000,fork,reuseaddr TCP:user_api:8000 &
+        socat TCP-LISTEN:8001,fork,reuseaddr TCP:locker_api:8001 &
+        socat TCP-LISTEN:8002,fork,reuseaddr TCP:history_api:8002 &
+        socat TCP-LISTEN:8003,fork,reuseaddr TCP:auth_api:8003 &
+        socat TCP-LISTEN:8004,fork,reuseaddr TCP:acm:8004 &
+        socat TCP-LISTEN:8005,fork,reuseaddr TCP:notification_api:8005 &
+        socat TCP-LISTEN:8006,fork,reuseaddr TCP:reports_api:8006 &
+        socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres_user:5432 &
+        socat TCP-LISTEN:5433,fork,reuseaddr TCP:postgres_locker:5432 &
+        socat TCP-LISTEN:5434,fork,reuseaddr TCP:postgres_history:5432 &
+        socat TCP-LISTEN:5435,fork,reuseaddr TCP:postgres_auth:5432 &
+        socat TCP-LISTEN:5436,fork,reuseaddr TCP:postgres_notification:5432 &
+        socat TCP-LISTEN:5437,fork,reuseaddr TCP:postgres_reports:5432 &
+        wait
+    restart: unless-stopped

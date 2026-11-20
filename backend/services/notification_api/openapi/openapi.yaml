@@ -1,0 +1,334 @@
+openapi: 3.2.0
+info:
+  title: Notification API
+  description: |
+    API подсистемы уведомлений ScudDocs СКУД.
+
+    Поддерживает тип уведомлений:
+    - **persistent** — постоянные уведомления внутри Системы
+
+    ## Аутентификация
+
+    Заголовок `X-Remote-User` с ID пользователя.
+    Аутентификация выполняется на API Gateway.
+  version: 1.0.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8005/api/v1
+    description: Local development server
+
+tags:
+  - name: Notifications
+    description: Операции с уведомлениями
+
+security:
+  - RemoteUser: []
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+
+  /live:
+    get:
+      tags:
+        - health
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        '200':
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - health
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                required: [status, db]
+        '503':
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+
+  /notifications:
+    $ref: './paths/notifications.yaml#/notifications'
+
+  /notification/{notificationId}:
+    $ref: './paths/notifications.yaml#/notification_by_id'
+
+  # Внутренние эндпоинты: системные уведомления, порождаемые другими
+  # сервисами (locker_api → notification_client: threshold violation,
+  # locker open и т.п.). Закрыты снаружи через Apache (<Location /internal>
+  # Require all denied) — не требуют X-Remote-User. created_by записывается
+  # как NULL (источник — система, не пользователь). См. internal_notification.py.
+  /internal/api/v1/notifications:
+    get:
+      summary: Список системных уведомлений (internal)
+      description: |
+        То же поведение, что и `GET /api/v1/notifications`, но без проверки
+        `X-Remote-User` — доступно только сервисам внутри `backend_net`.
+        Снаружи Apache отдаёт 403 на `/internal/*`.
+      tags:
+        - internal
+      security: []
+      parameters:
+        - $ref: './components/parameters.yaml#/NotificationTypeQuery'
+        - $ref: './components/parameters.yaml#/UserIdQuery'
+        - $ref: './components/parameters.yaml#/RoleQuery'
+        - $ref: './components/parameters.yaml#/TagKeyQuery'
+        - $ref: './components/parameters.yaml#/TagValueQuery'
+        - $ref: './components/parameters.yaml#/ActiveOnlyQuery'
+        - $ref: './components/parameters.yaml#/LimitQuery'
+        - $ref: './components/parameters.yaml#/OffsetQuery'
+      responses:
+        '200':
+          description: Список уведомлений с пагинацией
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/notification.yaml#/NotificationListResponse'
+        '503':
+          $ref: './components/responses.yaml#/DatabaseError'
+    post:
+      summary: Создать системное уведомление (internal)
+      description: |
+        То же поведение, что и `POST /api/v1/notifications`, но `created_by`
+        записывается как NULL (источник — система). Используется
+        `locker_api` для авто-уведомлений (threshold violation, locker open).
+        Доступно только из `backend_net`; снаружи Apache отдаёт 403.
+      tags:
+        - internal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/notification.yaml#/CreateNotificationRequest'
+      responses:
+        '201':
+          description: Уведомление создано
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/notification.yaml#/NotificationWithRecipients'
+        '400':
+          $ref: './components/responses.yaml#/BadRequest'
+        '503':
+          $ref: './components/responses.yaml#/DatabaseError'
+
+  /internal/api/v1/notification/{notificationId}:
+    delete:
+      summary: Отменить системное уведомление (internal)
+      description: |
+        То же поведение, что и `DELETE /api/v1/notification/{id}`
+        (устанавливает `is_cancelled=true`), но без проверки `X-Remote-User`.
+        Используется системой для авто-снятия уведомлений (например, шкаф
+        закрыт → снять «шкаф открыт»). Доступно только из `backend_net`.
+      tags:
+        - internal
+      security: []
+      parameters:
+        - $ref: './components/parameters.yaml#/NotificationIdPath'
+      responses:
+        '200':
+          description: Уведомление отменено
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/notification.yaml#/Notification'
+        '404':
+          $ref: './components/responses.yaml#/NotFound'
+        '503':
+          $ref: './components/responses.yaml#/DatabaseError'
+
+  # Внутренний эндпоинт: auth_api вызывает его для доставки OTP-кодов
+  # (SMS-primary, MAX-fallback). Закрыт снаружи через Apache
+  # (<Location /internal>) и подписан HMAC-SHA256 ключом
+  # INTERNAL_OTP_HMAC_KEY. См. internal_otp.py.
+  /internal/api/v1/otp/send:
+    post:
+      summary: Send OTP code — SMS-primary, MAX-fallback (internal)
+      description: |
+        Принять OTP-код от auth_api и отправить его получателю: SMS-primary,
+        MAX-fallback.
+
+        ### Безопасность
+        - Endpoint закрыт снаружи: Apache отдаёт 403 на `/internal/*`.
+        - HMAC-подпись:
+          `X-Internal-Timestamp` (Unix-секунды) и
+          `X-Internal-Signature` (HMAC-SHA256 над `timestamp + METHOD + path + sha256(body)`),
+          ключ — `INTERNAL_OTP_HMAC_KEY` (общий с auth_api).
+          Запросы с замоченной/просроченной (>30 с) подписью — 401.
+
+        ### Маршрутизация: канал выбирает сервер, не клиент
+        Запрос не содержит поля `channel` — notification_api сам решает,
+        куда отправить код:
+        - Если передан `address` и SMS-транспорт настроен
+          (`SMS_GATEWAY_URL` + креды шлюза) — код уходит по SMS.
+        - Иначе — по MAX (если пользователь уже привязал бота,
+          `max_user_id` непустой).
+        - Если попытка по SMS не удалась, а `max_user_id` привязан —
+          перед ответом делается fallback-попытка по MAX.
+
+        ### Поведение
+        - Код доставлен получателю (по SMS или по MAX, включая
+          fallback) — 204.
+        - Ни один транспорт не доступен для этого получателя прямо сейчас
+          (dev/CI без `SMS_GATEWAY_URL`/`MAX_BOT_TOKEN`, либо MAX — основной
+          канал, а пользователь ещё не привязал бота) — код паркуется в
+          outbox, 200 `{"status": "queued_until_binding"}`. Это **не**
+          штатный ответ для обычного непривязанного пользователя — если для
+          него настроен SMS (есть `address`), код уйдёт по SMS и вернётся
+          204.
+        - Оба доступных транспорта недоступны/отказали (SMS без успешного
+          MAX-fallback, либо единственный настроенный транспорт вернул
+          ошибку) — 503.
+      tags:
+        - internal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, code]
+              properties:
+                user_id:
+                  type: integer
+                  description: ID пользователя из user_api
+                code:
+                  type: string
+                  description: Сырой OTP-код (auth_api генерирует его перед вызовом)
+                  maxLength: 16
+                max_user_id:
+                  type: integer
+                  nullable: true
+                  description: Идентификатор получателя в Max; null если не привязан
+                address:
+                  type: string
+                  maxLength: 64
+                  pattern: '^\+7\d{10}$'
+                  example: "+79001234567"
+                  description: |
+                    Телефон получателя (`user_api.users.phone`) в формате
+                    `+7XXXXXXXXXX` — адрес доставки по SMS. Опционален: без
+                    него (или если SMS-транспорт не настроен) маршрутизация
+                    падает на MAX.
+                ttl_seconds:
+                  type: integer
+                  default: 300
+                  minimum: 1
+                  maximum: 3600
+                purpose:
+                  type: string
+                  maxLength: 32
+                  default: otp_login
+                  description: |
+                    Назначение OTP (`otp_login` | `otp_command` | ...). Сохраняется
+                    в outbox-записи для аудита/фильтрации. Default: `otp_login`
+                    для обратной совместимости с login flow.
+      responses:
+        '204':
+          description: Код доставлен получателю (по SMS или по MAX)
+        '200':
+          description: |
+            Код поставлен в очередь — ни один транспорт не доступен для
+            этого получателя прямо сейчас (dev/CI без настроенного
+            SMS/MAX, либо MAX-основной пользователь ещё не привязал бота).
+            Не путать со штатной доставкой: обычный непривязанный
+            пользователь с настроенным SMS получит 204, а не этот ответ.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [queued_until_binding]
+        '400':
+          description: Невалидный DTO
+        '401':
+          description: Подпись HMAC отсутствует, невалидна или просрочена
+        '503':
+          description: Оба доступных транспорта недоступны (SMS и MAX-fallback, либо единственный настроенный транспорт вернул ошибку)
+
+components:
+  securitySchemes:
+    $ref: './components/securitySchemes.yaml'
+
+  parameters:
+    $ref: './components/parameters.yaml'
+
+  responses:
+    $ref: './components/responses.yaml'
+
+  schemas:
+    NotificationId:
+      $ref: './schemas/common_fields.yaml#/NotificationId'
+    UserId:
+      $ref: './schemas/common_fields.yaml#/UserId'
+    Timestamp:
+      $ref: './schemas/common_fields.yaml#/Timestamp'
+    NullableTimestamp:
+      $ref: './schemas/common_fields.yaml#/NullableTimestamp'
+
+    ProblemDetails:
+      $ref: './schemas/error.yaml#/ProblemDetails'
+
+    NotificationType:
+      $ref: './schemas/notification.yaml#/NotificationType'
+    Notification:
+      $ref: './schemas/notification.yaml#/Notification'
+    NotificationRecipient:
+      $ref: './schemas/notification.yaml#/NotificationRecipient'
+    NotificationWithRecipients:
+      $ref: './schemas/notification.yaml#/NotificationWithRecipients'
+    NotificationListResponse:
+      $ref: './schemas/notification.yaml#/NotificationListResponse'
+    CreateNotificationRequest:
+      $ref: './schemas/notification.yaml#/CreateNotificationRequest'

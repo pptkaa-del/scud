@@ -1,0 +1,112 @@
+BadRequest:
+  description: Некорректный запрос (отсутствуют обязательные поля или неверный формат)
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingFields:
+          summary: Отсутствуют обязательные поля
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "phone and password are required"
+            instance: "/api/v1/auth/login"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidCode:
+          summary: Отсутствует код OTP
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "phone and code are required"
+            instance: "/api/v1/auth/verify"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Unauthorized:
+  description: Неверные учётные данные / OTP / токен
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        invalidCredentials:
+          summary: Неверный телефон или пароль
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid phone number or password"
+            instance: "/api/v1/auth/login"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidOtp:
+          summary: Неверный OTP
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid or expired code"
+            instance: "/api/v1/auth/verify"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidAccess:
+          summary: Невалидный access token
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid or expired access token"
+            instance: "/api/v1/auth/access"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        missingAccess:
+          summary: Отсутствует access cookie
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Missing access_token cookie"
+            instance: "/api/v1/auth/access"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+TooManyRequests:
+  description: Превышен лимит попыток
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        rateLimitLogin:
+          summary: Превышен лимит попыток входа с IP
+          value:
+            type: "https://api.scuddocs.com/problems/too-many-requests"
+            title: "Too Many Requests"
+            status: 429
+            detail: "Too many login attempts, try again later"
+            instance: "/api/v1/auth/login"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        rateLimitOtp:
+          summary: Превышено количество попыток ввода OTP
+          value:
+            type: "https://api.scuddocs.com/problems/too-many-requests"
+            title: "Too Many Requests"
+            status: 429
+            detail: "Too many invalid attempts, request a new code"
+            instance: "/api/v1/auth/verify"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+ServiceUnavailable:
+  description: Код входа не удалось доставить или зависимый сервис недоступен
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        otpDeliveryUnavailable:
+          summary: Ни SMS, ни Max не доставили код
+          value:
+            type: "https://api.scuddocs.com/problems/service-unavailable"
+            title: "Service Unavailable"
+            status: 503
+            detail: "Не удалось отправить код подтверждения. Попробуйте позже или обратитесь к администратору."
+            instance: "/api/v1/auth/login"
+            timestamp: "2024-01-15T10:30:00.123Z"

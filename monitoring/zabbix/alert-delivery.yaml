@@ -1,0 +1,39 @@
+---
+# Only the Max Messenger media type is importable via configuration.import.
+# Zabbix 7.0 configuration.import does not accept usergroups / users / actions
+# in its export schema, so the SCUD On-Call user group, the placeholder on-call
+# user, and the severity>=HIGH notification action are provisioned through the
+# dedicated JSON-RPC APIs in provision.py instead.
+zabbix_export:
+  version: "7.0"
+
+  media_types:
+    - name: "Max Messenger"
+      type: WEBHOOK
+      parameters:
+        - name: token
+          value: "{$MAX.BOT.TOKEN}"
+        - name: max_user_id
+          value: "{ALERT.SENDTO}"
+        - name: subject
+          value: "{ALERT.SUBJECT}"
+        - name: message
+          value: "{ALERT.MESSAGE}"
+      timeout: 30s
+      process_tags: "NO"
+      script: |
+        var params = JSON.parse(value);
+        var req = new HttpRequest();
+        req.addHeader('Authorization: ' + params.token);
+        req.addHeader('Content-Type: application/json');
+        var url = 'https://platform-api.max.ru/messages?user_id=' + params.max_user_id;
+        var body = JSON.stringify({
+            text: params.subject + '\n' + params.message,
+            format: 'markdown',
+            notify: true
+        });
+        var resp = req.post(url, body);
+        if (req.getStatus() !== 200) {
+            throw 'Max API returned ' + req.getStatus();
+        }
+        return 'OK';

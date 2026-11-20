@@ -1,0 +1,209 @@
+# =================================================================
+# Success Responses
+# =================================================================
+
+NoContent:
+  description: Успешная операция без возврата данных (например, после удаления)
+
+TelemetryBatchCreated:
+  description: Batch телеметрии успешно создан
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          inserted:
+            type: integer
+            description: Количество вставленных записей
+            example: 150
+      example:
+        inserted: 150
+
+# =================================================================
+# Error Responses
+# =================================================================
+
+BadRequest:
+  description: Некорректный запрос (отсутствуют обязательные поля или неверный формат)
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingFields:
+          summary: Отсутствуют обязательные поля
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: Missing 'readings' field"
+            instance: "/api/v1/telemetry"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidFormat:
+          summary: Некорректный формат данных
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: Invalid 'recorded_at' format in reading #5"
+            instance: "/api/v1/telemetry"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        tooManyRecords:
+          summary: Слишком много записей в batch
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: Too many readings (max 1000 per request)"
+            instance: "/api/v1/telemetry"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidDateRange:
+          summary: Некорректный временной диапазон
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: Invalid 'from' date format (use ISO 8601)"
+            instance: "/api/v1/telemetry/list"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        limitExceeded:
+          summary: Превышен лимит
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: limit must be between 1 and 10000"
+            instance: "/api/v1/telemetry/list"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Unauthorized:
+  description: Требуется аутентификация или аутентификация не прошла
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingHeader:
+          summary: Отсутствует заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Missing X-Remote-User header"
+            instance: "/api/v1/telemetry/list"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidHeader:
+          summary: Некорректный заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid X-Remote-User header"
+            instance: "/api/v1/telemetry/list"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+NotFound:
+  description: Запрошенный ресурс не найден
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        eventNotFound:
+          summary: Событие не найдено
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Security event not found"
+            instance: "/api/v1/events/security/123"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        photoNotFound:
+          summary: Фотография не найдена
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Photo not found"
+            instance: "/api/v1/media/456"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        commandNotFound:
+          summary: Команда не найдена
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Command history not found"
+            instance: "/api/v1/commands/history/789"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Conflict:
+  description: Конфликт при создании или обновлении ресурса
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        duplicateCommand:
+          summary: Дубликат команды
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "Command with this ID already exists in history"
+            instance: "/api/v1/commands/history"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+PayloadTooLarge:
+  description: Размер запроса превышает допустимый лимит
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/payload-too-large"
+        title: "Payload Too Large"
+        status: 413
+        detail: "File size exceeds maximum allowed size of 10MB"
+        instance: "/api/v1/media"
+        timestamp: "2024-01-15T10:30:00.123Z"
+
+UnsupportedMediaType:
+  description: Неподдерживаемый тип медиа
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/unsupported-media-type"
+        title: "Unsupported Media Type"
+        status: 415
+        detail: "Only image/jpeg and image/png are supported"
+        instance: "/api/v1/media"
+        timestamp: "2024-01-15T10:30:00.123Z"
+
+DatabaseError:
+  description: Ошибка базы данных или внутренняя ошибка сервера
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        connectionTimeout:
+          summary: Timeout подключения к БД
+          value:
+            type: "https://api.scuddocs.com/problems/database-error"
+            title: "Database Error"
+            status: 503
+            detail: "Database connection timeout"
+            instance: "/api/v1/telemetry"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        internalError:
+          summary: Внутренняя ошибка
+          value:
+            type: "https://api.scuddocs.com/problems/internal-error"
+            title: "Internal Server Error"
+            status: 500
+            detail: "An unexpected error occurred"
+            instance: "/api/v1/telemetry"
+            timestamp: "2024-01-15T10:30:00.123Z"

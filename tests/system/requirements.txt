@@ -1,0 +1,8 @@
+pytest>=8.3
+pytest-timeout>=2.3
+requests>=2.32
+docker>=7.0
+openpyxl==3.1.5
+# Relay-MQTT e2e double (scud_relay, mounted from emulator/src) imports gmqtt
+# directly. Match the emulator pin (emulator/pyproject.toml).
+gmqtt>=0.7.0

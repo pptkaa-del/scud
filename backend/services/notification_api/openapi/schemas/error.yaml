@@ -1,0 +1,42 @@
+# RFC 7807 Problem Details for HTTP APIs
+# https://www.rfc-editor.org/rfc/rfc7807
+
+ProblemDetails:
+  type: object
+  description: |
+    RFC 7807 Problem Details - стандартный формат ошибок HTTP API.
+
+    Зарегистрированные значения `type`:
+    - https://api.scuddocs.com/problems/validation-error
+    - https://api.scuddocs.com/problems/not-found
+    - https://api.scuddocs.com/problems/conflict
+  required:
+    - type
+    - title
+    - status
+    - detail
+  properties:
+    type:
+      type: string
+      description: URI-идентификатор типа проблемы
+      example: "https://api.scuddocs.com/problems/not-found"
+    title:
+      type: string
+      description: Краткое описание проблемы
+      example: "Not Found"
+    status:
+      type: integer
+      description: HTTP статус код
+      example: 404
+    detail:
+      type: string
+      description: Детальное описание проблемы
+      example: "Notification not found"
+    instance:
+      type: string
+      description: URI запроса
+      example: "/api/v1/notification/550e8400-e29b-41d4-a716-446655440000"
+    timestamp:
+      type: string
+      format: date-time
+      description: Время возникновения ошибки

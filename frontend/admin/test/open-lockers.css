@@ -1,0 +1,122 @@
+.locker-card {
+    background-color: white;
+    border-radius: var(--border-radius);
+    padding: 20px;
+    box-shadow: var(--box-shadow);
+    cursor: pointer;
+    transition: var(--transition);
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    border-left: 4px solid transparent;
+}
+
+.locker-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    text-decoration: none;
+    color: inherit;
+}
+
+.locker-card.open {
+    border-left-color: var(--success-color);
+}
+
+/* Карточка с запросом помощи — красная рамка + пульсация */
+.locker-card.help {
+    border-left-color: var(--danger-color);
+    border: 2px solid rgba(231, 76, 60, 0.4);
+    border-left: 4px solid var(--danger-color);
+    animation: helpCardPulse 2s ease-in-out infinite;
+}
+
+@keyframes helpCardPulse {
+    0%, 100% { box-shadow: var(--box-shadow); }
+    50% { box-shadow: 0 4px 24px rgba(231, 76, 60, 0.4); }
+}
+
+
+.locker-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.locker-inventory {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark-color);
+}
+
+.locker-state-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.state-open {
+    background-color: rgba(39, 174, 96, 0.12);
+    color: var(--success-color);
+}
+
+.state-help {
+    background-color: rgba(231, 76, 60, 0.12);
+    color: var(--danger-color);
+}
+
+.locker-address {
+    font-size: 14px;
+    color: var(--gray-color);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.locker-address i {
+    width: 16px;
+    color: var(--secondary-color);
+}
+
+.locker-time-open {
+    font-size: 13px;
+    color: var(--gray-color);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.locker-time-open i {
+    color: var(--secondary-color);
+}
+
+.tasks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.lockers-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--gray-color);
+    gap: 16px;
+}
+
+.lockers-empty i {
+    font-size: 48px;
+    opacity: 0.4;
+}
+
+.lockers-empty p {
+    font-size: 16px;
+    margin: 0;
+}

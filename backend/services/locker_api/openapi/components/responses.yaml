@@ -1,0 +1,176 @@
+BadRequest:
+  description: Некорректный запрос (отсутствуют обязательные поля или неверный формат)
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingFields:
+          summary: Отсутствуют обязательные поля
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: inventory_number is required"
+            instance: "/api/v1/lockers"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidInput:
+          summary: Некорректный ввод
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: sensor_type_id must be an integer"
+            instance: "/api/v1/lockers/550e8400-e29b-41d4-a716-446655440000/sensors"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Unauthorized:
+  description: Требуется аутентификация или аутентификация не прошла
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingHeader:
+          summary: Отсутствует заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Missing X-Remote-User header"
+            instance: "/api/v1/lockers"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidHeader:
+          summary: Некорректный заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid X-Remote-User header"
+            instance: "/api/v1/lockers"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidApiKey:
+          summary: Некорректный API ключ устройства
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid API key"
+            instance: "/api/v1/lockers/550e8400-e29b-41d4-a716-446655440000/state"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+NotFound:
+  description: Запрошенный ресурс не найден
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        lockerNotFound:
+          summary: Шкаф не найден
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Locker not found"
+            instance: "/api/v1/lockers/550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        sensorNotFound:
+          summary: Датчик не найден
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Sensor not found"
+            instance: "/api/v1/lockers/550e8400-e29b-41d4-a716-446655440000/sensors/abc123"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        sensorTypeNotFound:
+          summary: Тип датчика не найден
+          value:
+            type: "https://api.scuddocs.com/problems/not-found"
+            title: "Not Found"
+            status: 404
+            detail: "Sensor type with ID 999 not found"
+            instance: "/api/v1/sensor-types/999"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Conflict:
+  description: Конфликт при создании или удалении ресурса
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        duplicateInventoryNumber:
+          summary: Дубликат инвентарного номера
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "Locker with this inventory number already exists"
+            instance: "/api/v1/lockers"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        sensorTypeInUse:
+          summary: Тип датчика используется
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "Cannot delete sensor type: sensors with this type exist"
+            instance: "/api/v1/sensor-types/1"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        sensorTypeCodeExists:
+          summary: Код типа датчика уже существует
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "Sensor type with code 'temperature' already exists"
+            instance: "/api/v1/sensor-types"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+DatabaseError:
+  description: Ошибка базы данных
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/database-error"
+        title: "Database Error"
+        status: 503
+        detail: "Database connection timeout"
+        instance: "/api/v1/lockers"
+        timestamp: "2024-01-15T10:30:00.123Z"
+
+NoContent:
+  description: Успешная операция без возврата данных (например, после удаления)
+
+RelayConflict:
+  description: |
+    Relay-команда невозможна в текущем состоянии шкафа: `relay-block-absent`,
+    `board-offline`, `relay-channel-unavailable` или `relay-command-in-progress`
+    (см. `RelayProblemType`).
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/relay-command-in-progress"
+        title: "Conflict"
+        status: 409
+        detail: "Relay 2 already has an active command"
+        instance: "/api/v1/locker/550e8400-e29b-41d4-a716-446655440000/commands"
+
+RelayInvalidParameters:
+  description: '`parameters` relay-команды не `{"relay": 1..4}` (`relay-invalid-parameters`).'
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/relay-invalid-parameters"
+        title: "Unprocessable Entity"
+        status: 422
+        detail: 'parameters must be {"relay": 1..4}'
+        instance: "/api/v1/locker/550e8400-e29b-41d4-a716-446655440000/commands"

@@ -1,0 +1,120 @@
+CommandHistory:
+  type: object
+  description: |
+    Запись истории выполнения команды.
+    Содержит денормализованные данные о пользователе и шкафе для быстрого формирования отчетов.
+  required:
+    - id
+    - command_id
+    - locker_id
+    - command_type
+    - status
+    - created_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/CommandHistoryId'
+    command_id:
+      $ref: './common_fields.yaml#/CommandId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    locker_inventory_number:
+      type: string
+      nullable: true
+      description: Инвентарный номер шкафа (денормализован)
+      example: "СО №777"
+    command_type:
+      type: string
+      description: Тип команды
+      enum: [open, close, reboot, config, relay_on, relay_off, relay_restart]
+      example: open
+    parameters:
+      type: object
+      description: Параметры команды (JSON)
+      additionalProperties: true
+      example: {}
+    created_by:
+      $ref: './common_fields.yaml#/UserId'
+    user_phone:
+      type: string
+      nullable: true
+      description: Телефон пользователя (денормализован для отчетов)
+      example: "+79991234567"
+    user_full_name:
+      type: string
+      nullable: true
+      description: ФИО пользователя (денормализован для отчетов)
+      example: "Иванов Иван Иванович"
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    sent_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    executed_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    failed_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    status:
+      type: string
+      enum: [pending, sent, delivered, executed, failed]
+      example: executed
+    result:
+      type: object
+      description: Результат выполнения (JSON)
+      example: {"success": true}
+    error_message:
+      type: string
+      nullable: true
+      description: Сообщение об ошибке (если статус failed)
+      example: null
+
+CommandHistoryCreate:
+  type: object
+  description: Данные для создания записи истории команды
+  required:
+    - command_id
+    - locker_id
+    - command_type
+    - status
+  properties:
+    command_id:
+      $ref: './common_fields.yaml#/CommandId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    locker_inventory_number:
+      type: string
+      nullable: true
+    command_type:
+      type: string
+      enum: [open, close, reboot, config, relay_on, relay_off, relay_restart]
+    parameters:
+      type: object
+    created_by:
+      type: integer
+      format: int64
+      nullable: true
+    user_phone:
+      type: string
+      nullable: true
+    user_full_name:
+      type: string
+      nullable: true
+    status:
+      type: string
+      enum: [pending, sent, delivered, executed, failed]
+
+CommandHistoryListResponse:
+  type: object
+  required:
+    - items
+    - total
+    - limit
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/CommandHistory'
+    total:
+      type: integer
+    limit:
+      type: integer
+    offset:
+      type: integer

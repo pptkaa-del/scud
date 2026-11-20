@@ -1,0 +1,24 @@
+NotificationId:
+  type: string
+  format: uuid
+  description: UUID уведомления
+  example: "550e8400-e29b-41d4-a716-446655440000"
+
+UserId:
+  type: integer
+  format: int64
+  description: ID пользователя
+  example: 1
+
+Timestamp:
+  type: string
+  format: date-time
+  description: Дата и время в формате ISO 8601
+  example: "2024-01-15T12:00:00Z"
+
+NullableTimestamp:
+  type: string
+  format: date-time
+  nullable: true
+  description: Дата и время (может быть null)
+  example: "2024-01-15T12:00:00Z"

@@ -1,0 +1,290 @@
+# ScudDocs root tooling config — единый конфиг для ruff/mypy/bandit/sqlfluff/
+# coverage. Tools — CI-only (ставятся через pip на ubuntu-latest runner).
+# Инварианты сертификации Astra (какие apt-репозитории допустимы в production)
+# — см. `backend/CONVENTIONS.md` и многостадийные сервис-Dockerfile'ы.
+#
+# Runtime coverage в *_tests контейнерах использует отдельный
+# `backend/.coveragerc` (намеренно без [paths] — там объяснение почему).
+# `coverage combine` на CI runner применяет [tool.coverage.paths] из этого
+# файла.
+
+# ----------------------------------------------------------------------------
+# ruff — fast linter покрывающий flake8/pylint/isort/pyupgrade/bandit-lite.
+# Конфигурируем максимально жёстко для боевого кода (backend/services/*/app,
+# backend/shared) и заметно мягче для тестов и миграций.
+# ----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "emulator",                # отдельный pip-проект, свой стиль
+    "tests/system",            # E2E, pip
+    "backend/secrets",         # рантайм-файлы
+    "**/migrations",           # SQL миграции линтятся через sqlfluff
+    "backend/shared/xlsx/pylightxl.py",  # vendored third-party (pylightxl, MIT) — не наш код
+    "backend/shared/_vendor",  # vendored third-party (gmqtt, MIT) — не наш код
+]
+
+[tool.ruff.lint]
+# Максимальный набор для боевого кода. См. https://docs.astral.sh/ruff/rules/.
+select = [
+    "E", "W",          # pycodestyle
+    "F",               # pyflakes
+    "B",               # flake8-bugbear (мутируемые дефолты, B904 raise-from и т.д.)
+    "C4",              # flake8-comprehensions
+    "UP",              # pyupgrade — modern Python 3.11+
+    "SIM",             # flake8-simplify
+    "S",               # bandit-style security checks
+    "RET",             # flake8-return
+    "PL",              # pylint subset
+    "RUF",             # ruff-native rules
+    "I",               # isort
+    "N",               # pep8-naming
+    "T20",             # flake8-print (запрет print() в продакшен-коде)
+    "LOG",             # flake8-logging
+    "PIE",             # flake8-pie
+    "ERA",             # commented-out code
+    "ASYNC",           # flake8-async (sleep/asyncio bugs)
+    "ARG",             # unused arguments
+    "PT",              # flake8-pytest-style
+    "RSE",             # flake8-raise
+    "TCH",             # flake8-type-checking
+]
+ignore = [
+    # ----- фундаментально не баги в нашем проекте -----
+    "E501",            # длинные строки — русские docstrings часто длиннее; line-length=120 проверяется отдельно
+    "RUF001",          # ambiguous-unicode-character-string — русский текст в строковых литералах
+    "RUF002",          # ambiguous-unicode-character-docstring — русские docstrings
+    "RUF003",          # ambiguous-unicode-character-comment — русские комментарии
+    "TCH001", "TCH002", "TCH003",  # не вводим `if TYPE_CHECKING:` блоки — runtime-стоимость
+                                    # импортов незначительна, раздвоение import-секций ухудшает читаемость
+    # ----- false positives дублирующие bandit skips (см. [tool.bandit]) -----
+    # Тот же набор обоснований применяется к ruff S-правилам (ruff "S" =
+    # bandit-style). См. [tool.bandit] skips ниже — там же причины.
+    "S101", "S104", "S105", "S106", "S108", "S311", "S608",
+    # ----- сложная для статанализа специфика -----
+    "PLR0911",         # too many returns — local control flow в handlers/validators
+    "PLR0912",         # too many branches — то же
+    "PLR0913",         # too many arguments — Tornado handlers и DTO factories широкие по DTO
+    "PLR0915",         # too many statements — то же
+    "PLR2004",         # magic value — code review ловит точечно
+    "PLW1508",         # invalid env var default — у нас осознанно int/dict как default
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Тесты — мягкий профиль. PT009/PT027 — у нас много unittest-style assertEqual/assertRaises,
+# переписывать на нативные assert постепенно (отдельные PR).
+"backend/services/*/tests/**" = [
+    "S", "PLR2004", "PLR0915", "PLR0913", "T20", "ERA", "ARG",
+    "PT004", "PT006", "PT009", "PT011", "PT012", "PT027",
+    "F401",  # unused imports в тестах — иногда нужны для side-effects/fixtures
+    "N",     # naming в тест-классах
+]
+"backend/tests/**" = [
+    "S", "PLR2004", "PLR0915", "PLR0913", "T20", "ERA", "ARG",
+    "PT004", "PT006", "PT009", "PT011", "PT012", "PT027", "F401", "N",
+]
+"backend/shared/test_fixtures/**" = ["S", "T20", "ARG"]
+# shared/tests — тот же мягкий профиль, что и сервисные тесты.
+"backend/shared/tests/**" = [
+    "S", "PLR2004", "PLR0915", "PLR0913", "T20", "ERA", "ARG",
+    "PT004", "PT006", "PT009", "PT011", "PT012", "PT018", "PT027",
+    "F401",  # unused imports в тестах — иногда нужны для side-effects/fixtures
+    "N",     # naming в тест-классах
+]
+# main.py: print стартовых сообщений (Tornado bootstrap) допустим;
+# C408 dict() — у нас осознанно для читаемости конфигов.
+"backend/services/*/app/main.py" = ["T20", "C408", "SIM105"]
+# Tornado handlers имеют фиксированную сигнатуру `get(self, ...)` — часть
+# kwargs из URL pattern могут быть не использованы конкретным handler'ом.
+# ARG ignore — только для handlers, в repositories/services/shared ARG
+# по-прежнему ловит реальные забытые параметры.
+"backend/services/*/app/handlers/**" = ["ARG001", "ARG002", "ARG003", "ARG004", "ARG005"]
+"backend/shared/auth/*.py" = ["ARG001", "ARG002", "ARG003", "ARG004", "ARG005"]
+# WebSocket handlers — те же фиксированные сигнатуры от Tornado
+# (on_pong(data), check_origin(origin) и т.п.), часть аргументов unused.
+"backend/services/*/app/websocket/**" = ["ARG001", "ARG002", "ARG003", "ARG004", "ARG005"]
+# logging.py: модуль конфигурирует stdlib logging — bandit срабатывает на rotating handler paths.
+"backend/shared/logging/**" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "shared"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ----------------------------------------------------------------------------
+# mypy — strict для боевого кода. Baseline overrides для модулей, где
+# подтянуть строгие типы потребует одновременной правки большого объёма.
+# Цель: со временем сокращать список overrides до пустого.
+# ----------------------------------------------------------------------------
+[tool.mypy]
+# Strict, запускается ОТДЕЛЬНО для каждого сервиса (cwd=backend/services/<svc>)
+# и для shared (cwd=backend) — у каждого сервиса свой пакет `app.*`, общий
+# mypy_path их не различает. Скрипт запуска — в .github/workflows/tests.yml.
+#
+# `ignore_missing_imports = true` — fundamentally needed: dacite/psycopg2/
+# tornado/bcrypt/jwt/prometheus_client не имеют официальных типов в Astra
+# `main`. Добавление types-* пакетов через pip — отдельный PR (нужно решить
+# где их хранить, чтобы не нарушить сертификацию).
+python_version = "3.11"
+# Кэш отключён. Линтеры гоняются в одноразовом контейнере (`linters`), который
+# монтирует репозиторий read-only (`/repo:ro`) — а cwd у каждого сервиса лежит
+# внутри этого маунта. mypy по умолчанию пишет `.mypy_cache/missing_stubs`
+# (для сервисов с непокрытыми stub-пакетами) → OSError на read-only FS. Кэшировать
+# между прогонами в CI нечего, поэтому `/dev/null` полностью выключает запись кэша
+# (документированный mypy-способ для CI).
+cache_dir = "/dev/null"
+strict = true
+warn_redundant_casts = true
+warn_unreachable = true
+namespace_packages = true
+explicit_package_bases = true
+ignore_missing_imports = true
+# vendored third-party (pylightxl/gmqtt, MIT) — не наш код, не подпадает под strict
+exclude = "(shared/xlsx/pylightxl\\.py$|shared/_vendor/)"
+
+# vendored third-party (pylightxl, MIT) — не анализируем как наш код. follow_imports=skip
+# делает его символы Any для нашей обёртки shared.xlsx.__init__ (которая остаётся strict).
+[[tool.mypy.overrides]]
+module = "shared.xlsx.pylightxl"
+follow_imports = "skip"
+ignore_errors = true
+
+# shared.database — psycopg2 API динамический; локально снижаем строгость.
+[[tool.mypy.overrides]]
+module = "shared.database.*"
+disallow_untyped_calls = false
+
+# ----------------------------------------------------------------------------
+# bandit — security checks. ruff ловит часть, но bandit полнее в обнаружении
+# плохих криптопаттернов, eval/exec, SQL injection.
+# ----------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = [
+    "backend/services/*/tests",
+    "backend/tests",
+    "tests",
+    "emulator",
+    "backend/shared/xlsx/pylightxl.py",  # vendored third-party (pylightxl, MIT) — не наш код
+    "backend/shared/_vendor",  # vendored third-party (gmqtt, MIT) — не наш код
+]
+skips = [
+    "B101",   # assert — pytest pattern, тесты исключены и так
+    "B104",   # bind 0.0.0.0 — норма для контейнеров за gateway
+    "B105",   # hardcoded password — единственный кейс _DEFAULT_JWT_SECRET имеет явный
+              # warning-комментарий + runtime-проверку `_warn_if_default_jwt_secret`
+              # (см. backend/services/auth_api/app/main.py:86,171)
+    "B108",   # /tmp directory — DEFAULT_PHOTO_OUTBOUND_DIR контейнерный, выживает
+              # только до restart pod (см. photo_producer.py:29)
+    "B311",   # pseudo-random — для не-крипто путей OK; OTP/JWT используют secrets/os.urandom
+    "B608",   # f-string SQL — все f-string SQL-сборки используют %s параметризацию,
+              # а имена колонок берутся из whitelist локальных литералов (не из user input).
+              # ВАЖНО: при добавлении новых f-string SQL — explicit whitelist column-names.
+]
+
+# ----------------------------------------------------------------------------
+# sqlfluff — Postgres dialect для миграций.
+# ----------------------------------------------------------------------------
+[tool.sqlfluff.core]
+dialect = "postgres"
+large_file_skip_byte_limit = 0
+# Наши миграции написаны в "DDL-стиле": колонки выровнены пробелами для
+# читаемости, типы и литералы — mixed case. Эти правила фундаментально
+# конфликтуют со стилем, оставляем как baseline.
+exclude_rules = [
+    "L034",    # column ordering — слишком жёстко для миграций
+    "LT01",    # spacing — миграции выровнены по колонкам пробелами
+    "LT02",    # indentation — DDL отступы для читаемости
+    "CP02",    # identifiers case — допускаем mixed case в DDL
+    "CP05",    # datatypes case — пишем как удобно
+]
+max_line_length = 120
+
+[tool.sqlfluff.indentation]
+indent_unit = "space"
+tab_space_size = 4
+
+# Boolean/NULL литералы — UPPERCASE (DDL-стиль, доминирует в большинстве
+# миграций). Функции — lowercase (стандарт Postgres-документации).
+# См. backend/CONVENTIONS.md → раздел "SQL стиль миграций".
+[tool.sqlfluff.rules.capitalisation.literals]
+capitalisation_policy = "upper"
+
+[tool.sqlfluff.rules.capitalisation.functions]
+capitalisation_policy = "lower"
+
+# ----------------------------------------------------------------------------
+# coverage — сбор и отчёт. Запускается внутри *_tests контейнеров (test stage
+# Dockerfile, python3-coverage из Astra extended).
+# Параллельная запись из 7 сервисов → coverage combine на CI runner.
+# ----------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+parallel = true                    # данные пишутся в .coverage.<machinename>.<pid>.<rand>
+source = ["app", "shared"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__init__.py",
+]
+# data_file сознательно НЕ задан здесь: путь зависит от контекста запуска.
+# - в *_tests контейнерах переопределяется env COVERAGE_FILE=/coverage/.coverage.<svc>
+#   (bind-mount → backend/.coverage-data/<svc>/);
+# - в CI job `coverage-combine` запускается из backend/, пишет в локальный
+#   `.coverage` (default).
+disable_warnings = ["module-not-imported", "no-data-collected"]
+
+[tool.coverage.paths]
+# Нормализуем пути из *_tests контейнеров (/app/<svc>/, /app/shared/) к
+# репозиторным. На каждый сервис — своя секция: общий regex `/app/` не
+# годится, coverage применяет mapping только если target существует, и
+# pathmap для services не срабатывал из-за конфликта порядка regex с shared.
+#
+# Target-пути (первое значение) — ОТНОСИТЕЛЬНО backend/. Воркфлоу запускает
+# `coverage combine --rcfile=../pyproject.toml` из `cd backend` (там же
+# docker compose, секреты — backend/ это де-факто рабочая директория для
+# всех CI-операций над backend). Если коммитить пути вида
+# `backend/services/<svc>/`, coverage из cwd=backend/ резолвит их в
+# `backend/backend/services/...`, target не находит, mapping отбрасывает
+# → raw `/app/...` остаются и `coverage xml/report` падают с
+# "No source for code". См. `backend/.coveragerc` для контекста.
+shared = ["shared/", "/app/shared/"]
+user_api = ["services/user_api/", "/app/user_api/"]
+locker_api = ["services/locker_api/", "/app/locker_api/"]
+history_api = ["services/history_api/", "/app/history_api/"]
+auth_api = ["services/auth_api/", "/app/auth_api/"]
+acm = ["services/acm/", "/app/acm/"]
+notification_api = ["services/notification_api/", "/app/notification_api/"]
+reports_api = ["services/reports_api/", "/app/reports_api/"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+skip_covered = false
+# Anti-regression floor = measured combined coverage (64%) − 5 п.п. запаса.
+# Читается ТОЛЬКО объединённым job-ом `coverage-combine` (см.
+# .github/workflows/tests.yml): combined-отчёт по всем 8 источникам сравнивается
+# с этим порогом, `coverage report` → exit 2 при падении ниже. Per-service шаг
+# в матрице `backend-tests` намеренно вызывает `coverage report --fail-under=0`,
+# иначе сервис ниже среднего combined-показателя ронял бы свой собственный шаг.
+fail_under = 59
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.html]
+directory = "htmlcov"

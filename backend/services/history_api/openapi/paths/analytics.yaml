@@ -1,0 +1,108 @@
+analytics_sensors:
+  get:
+    summary: Получить агрегированные данные датчиков
+    description: |
+      Возвращает предрасчитанные агрегаты телеметрии.
+      Используется для построения графиков и аналитики.
+    operationId: getSensorAnalytics
+    tags:
+      - Analytics
+    security:
+      - RemoteUser: []
+    parameters:
+      - name: sensor_id
+        in: query
+        required: true
+        description: ID датчика (обязательно)
+        schema:
+          type: string
+          format: uuid
+      - $ref: '../components/parameters.yaml#/AggregationTypeQuery'
+      - $ref: '../components/parameters.yaml#/MetricQuery'
+      - $ref: '../components/parameters.yaml#/FromDateQuery'
+      - $ref: '../components/parameters.yaml#/ToDateQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список агрегатов с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/aggregation.yaml#/AggregationListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+analytics_locker_summary:
+  get:
+    summary: Сводка по шкафу
+    description: |
+      Возвращает сводную аналитику по всем датчикам шкафа
+      за указанный период времени.
+    operationId: getLockerSummary
+    tags:
+      - Analytics
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/AggregationTypeQuery'
+      - $ref: '../components/parameters.yaml#/FromDateQuery'
+      - $ref: '../components/parameters.yaml#/ToDateQuery'
+    responses:
+      '200':
+        description: Сводная аналитика по шкафу
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locker_id:
+                  $ref: '../schemas/common_fields.yaml#/LockerId'
+                period_start:
+                  $ref: '../schemas/common_fields.yaml#/Timestamp'
+                period_end:
+                  $ref: '../schemas/common_fields.yaml#/Timestamp'
+                sensors:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sensor_id:
+                        $ref: '../schemas/common_fields.yaml#/SensorId'
+                      sensor_type_code:
+                        $ref: '../schemas/common_fields.yaml#/SensorTypeCode'
+                      avg:
+                        type: number
+                        nullable: true
+                      min:
+                        type: number
+                        nullable: true
+                      max:
+                        type: number
+                        nullable: true
+                      sample_count:
+                        type: integer
+              example:
+                locker_id: "550e8400-e29b-41d4-a716-446655440000"
+                period_start: "2024-03-01T00:00:00Z"
+                period_end: "2024-03-31T23:59:59Z"
+                sensors:
+                  - sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+                    sensor_type_code: "temperature"
+                    avg: 24.5
+                    min: 18.0
+                    max: 32.0
+                    sample_count: 2880
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'

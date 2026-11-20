@@ -1,0 +1,261 @@
+commands:
+  get:
+    summary: Получить историю команд для шкафа
+    description: |
+      Возвращает список команд для указанного шкафа с поддержкой пагинации.
+      Требуется аутентификация через X-Remote-User header.
+    operationId: getCommands
+    tags:
+      - Commands
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список команд с пагинацией
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command.yaml#/CommandListResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать новую команду для шкафа
+    description: |
+      Создает новую команду управления для шкафа.
+      Требуется аутентификация через X-Remote-User header.
+
+      **Срок жизни команды:** `COMMAND_TTL_S` (по умолчанию 60 с) отсчитывается от
+      `created_at`. Если шкаф не прислал результат за это время, команда становится
+      `failed` с `error_message` «истёк срок ожидания ответа шкафа» (фактически — в
+      пределах TTL + интервал queue-processor'а) и больше никогда не отправляется.
+      Терминальный статус (`executed`/`failed`) не меняется: поздний или повторный
+      ответ шкафа его не перезаписывает. SUCCESS от шкафа после терминального
+      статуса порождает событие безопасности `command_late_execution` (severity
+      `high`) и постоянное уведомление операторам и администраторам; исключение —
+      повтор SUCCESS по выполненной `close` (переисполнение retained-команды при
+      переподключении платы), он не тревожит.
+
+      **Побочные эффекты при выполнении команды устройством:**
+      - `open`: автоматически создаётся постоянное уведомление (тип `persistent`) для
+        операторов и администраторов с тегами `event=locker_opened`, `locker_id`,
+        `opened_by_user_id`. Уведомление отменяется автоматически при выполнении
+        команды `close`.
+      - `close`: отменяет активное уведомление об открытии шкафа (если есть).
+      - `relay_*`: состояние канала не меняется по ответу шкафа — фактическое
+        состояние приходит в следующем `stat` (`GET /locker/{lockerId}/relays`).
+
+      **Матрица прав по типу команды:**
+      - `worker` — `open`, `close`
+      - `operator` / `administrator` — `open`, `close`, `reboot`, `relay_on`,
+        `relay_off`, `relay_restart`
+
+      **Relay-команды** (`parameters` строго `{"relay": 1..4}`) проверяются до
+      выдачи step-up challenge и повторно при `/commands/confirm`: блок реле есть
+      (`has_relays=true`), плата online, канал существует, активен и управление
+      разрешено, защищённым каналом управляет только administrator. На канал —
+      не больше одной активной (pending/sent/delivered) команды. Коды отказов —
+      `RelayProblemType` в `ProblemDetails.type`. Политика канала:
+      `backend/shared/access_control/relays.py`.
+
+      Несоответствующая роль → 403. Реализация: `backend/shared/access_control/commands.py`.
+      Команда `config` выведена из эксплуатации — недоступна ни одной роли (→ 403).
+    operationId: createCommand
+    tags:
+      - Commands
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/command.yaml#/CommandCreate'
+          examples:
+            open:
+              summary: Команда открытия двери
+              value:
+                type: "open"
+                parameters:
+                  duration: 5
+            reboot:
+              summary: Команда перезагрузки
+              value:
+                type: "reboot"
+            relay_off:
+              summary: Выключить канал 2 блока реле
+              value:
+                type: "relay_off"
+                parameters:
+                  relay: 2
+    responses:
+      '201':
+        description: Команда успешно создана
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command.yaml#/Command'
+      '202':
+        description: |
+          Пользователь имеет `require_2fa=true` и команда требует step-up
+          (open / reboot / relay_*). Команда НЕ записана в БД; клиент должен
+          отправить OTP-код на `POST /locker/{lockerId}/commands/confirm`
+          с возвращённым `challenge_id`.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, delivery_status]
+              properties:
+                challenge_id:
+                  type: string
+                  format: uuid
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                delivery_status:
+                  type: string
+                  enum: [sent, queued_until_binding]
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        description: |
+          Стандартный 401 (нет X-Remote-User) ИЛИ специальный
+          `max-binding-required` — у пользователя включён 2FA, но Max-бот
+          ещё не привязан (`max_user_id` пустой).
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '403':
+        description: |
+          Роль пользователя не разрешает данный тип команды (например, worker
+          отправляет `reboot`, либо любая роль отправляет выведенный из
+          эксплуатации `config`). См. матрицу прав в
+          `backend/shared/access_control/commands.py`. Для relay-команд также
+          `relay-channel-protected`.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/RelayConflict'
+      '422':
+        $ref: '../components/responses.yaml#/RelayInvalidParameters'
+      '503':
+        description: |
+          Step-up backend (auth_api) недоступен. `detail` — русскоязычное
+          сообщение для пользователя; клиент должен повторить запрос позже.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+
+commands_confirm:
+  post:
+    summary: Подтвердить step-up OTP и поставить команду в очередь
+    description: |
+      Завершает двухшаговое создание команды для пользователей с `require_2fa=true`.
+      Принимает `challenge_id`, выданный предыдущим `POST /commands` (HTTP 202),
+      и OTP-код из Max-бота. После успешной валидации команда из исходного
+      запроса попадает в очередь идентично однозвенному 201-flow.
+
+      ACM проверяет роль (worker+ с Допуском на конкретный шкаф). После
+      verify повторно сверяется матрица command_type × роль и совпадение
+      `locker_id` с challenge — защита от reuse challenge на чужом шкафу.
+      Для relay-команд все проверки создания повторяются, политика канала
+      перечитывается из БД.
+    operationId: confirmCommand
+    tags:
+      - Commands
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [challenge_id, code]
+            properties:
+              challenge_id:
+                type: string
+                format: uuid
+              code:
+                type: string
+                maxLength: 16
+    responses:
+      '201':
+        description: Код принят, команда поставлена в очередь.
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command.yaml#/Command'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        description: Неверный / просроченный / уже использованный код.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '403':
+        description: |
+          Challenge принадлежит другому пользователю, или `locker_id` в
+          challenge не совпадает с URL, или роль не разрешает command_type,
+          или канал реле защищён (`relay-channel-protected`).
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../components/responses.yaml#/RelayConflict'
+      '422':
+        $ref: '../components/responses.yaml#/RelayInvalidParameters'
+      '503':
+        description: auth_api недоступен.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../schemas/error.yaml#/ProblemDetails'
+
+commands_by_id:
+  get:
+    summary: Получить команду по ID
+    description: Возвращает информацию о конкретной команде
+    operationId: getCommandById
+    tags:
+      - Commands
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+      - $ref: '../components/parameters.yaml#/CommandIdPath'
+    responses:
+      '200':
+        description: Данные команды
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command.yaml#/Command'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'

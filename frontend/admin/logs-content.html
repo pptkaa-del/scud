@@ -1,0 +1,181 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="page-title-main">
+            <h2 class="page-title">Системные логи</h2>
+            <p class="page-subtitle">Мониторинг событий и ошибок в реальном времени</p>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <!-- Панель поиска и фильтров -->
+    <div class="logs-controls-panel">
+        <div class="search-and-filters">
+            <div class="filter-group">
+                <span class="filter-label">Временной диапазон:</span>
+                <div class="time-range">
+                    <input type="text" id="timeRange" placeholder="Выберите период">
+                    <button class="btn-time-preset" data-hours="1">1 час</button>
+                    <button class="btn-time-preset" data-hours="24">24 часа</button>
+                    <button class="btn-time-preset" data-hours="168">7 дней</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Шкаф:</span>
+                <div class="logs-search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="lockerIdFilter" placeholder="Поиск по инвентарному номеру или адресу" autocomplete="off">
+                    <button class="logs-search-clear" id="lockerIdClearBtn" style="display:none">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="logs-search-suggestions" id="logsSearchSuggestions" style="display:none;"></div>
+                </div>
+            </div>
+
+            <div class="active-filters" id="activeFilters">
+                <!-- Активные фильтры -->
+            </div>
+        </div>
+
+        <div class="logs-stats">
+            <div class="stat-item">
+                <span class="stat-label">Всего записей:</span>
+                <span class="stat-value" id="totalLogs">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Обновлено:</span>
+                <span class="stat-value" id="lastUpdate">--:--:--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Терминал с логами -->
+    <div class="logs-terminal-container">
+        <div class="terminal-header">
+            <div class="terminal-title">
+                <i class="fas fa-terminal"></i>
+                <span>Журнал событий</span>
+                <div class="terminal-badge" id="liveIndicator">
+                    <i class="fas fa-circle"></i>
+                    <span>Онлайн</span>
+                </div>
+            </div>
+            <div class="terminal-controls">
+                <select class="module-filter module-filter-terminal" id="moduleFilter">
+                    <option value="incidents" selected>Инциденты</option>
+                    <option value="history">История команд</option>
+                </select>
+                <button class="btn-terminal" id="pauseBtn" title="Приостановить">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button class="btn-terminal" id="refreshBtn" title="Обновить">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="logs-terminal" id="logsTerminal">
+            <div class="terminal-empty">
+                <i class="fas fa-database"></i>
+                <p>Загрузка логов...</p>
+            </div>
+        </div>
+
+        <div class="terminal-footer">
+            <div class="footer-info">
+                <span>Показано: <span id="shownLogs">0</span> из <span id="filteredLogs">0</span></span>
+            </div>
+            <div class="footer-stats" id="paginationContainer"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно деталей лога -->
+<div class="modal-overlay" id="logDetailModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3>Детали события</h3>
+            <button class="modal-close" id="closeLogModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <div class="log-detail-view">
+                <div class="log-detail-header">
+                    <span class="log-level-badge" id="detailLevel"></span>
+                    <span class="log-timestamp" id="detailTimestamp"></span>
+                    <span class="log-module" id="detailModule"></span>
+                </div>
+
+                <div class="log-detail-message">
+                    <pre id="detailMessage"></pre>
+                </div>
+
+                <div class="log-detail-meta">
+                    <div class="meta-section">
+                        <h4><i class="fas fa-microchip"></i> </h4>
+                        <div class="meta-grid">
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailId"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailIp"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailUser"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailSession"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="meta-section">
+                        <h4><i class="fas fa-info-circle"></i> </h4>
+                        <div class="meta-grid">
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailCabinet"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">:</span>
+                                <span class="meta-value" id="detailAction"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">:</span>
+                                <span class="meta-value" id="detailErrorCode"></span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label"></span>
+                                <span class="meta-value" id="detailResponseTime"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="meta-section" id="stackTraceSection">
+                        <h4><i class="fas fa-code"></i></h4>
+                        <div class="code-block">
+                            <pre id="detailStackTrace"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" id="copyLogBtn">
+                <i class="fas fa-copy"></i>
+                Копировать
+            </button>
+            <button class="btn-primary" id="closeDetailBtn">
+                Закрыть
+            </button>
+        </div>
+    </div>
+</div>

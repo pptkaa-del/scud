@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScudDocs API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 48px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: #1a202c;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            font-size: 1.1rem;
+            margin-bottom: 48px;
+        }
+
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .api-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 32px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .api-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .api-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+
+        .api-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .api-title {
+            font-size: 1.5rem;
+            color: #1a202c;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .api-description {
+            color: #4a5568;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .api-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 0.875rem;
+            color: #718096;
+        }
+
+        .api-version {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .api-port {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge {
+            background: #e6fffa;
+            color: #047857;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .footer {
+            text-align: center;
+            color: #a0aec0;
+            font-size: 0.875rem;
+            padding-top: 24px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        .icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 ScudDocs API</h1>
+        <p class="subtitle">Документация REST API микросервисов</p>
+
+        <div class="api-grid">
+            <!-- User API -->
+            <a href="#" class="api-card" data-port="8080" target="_blank">
+                <div class="badge">Готово</div>
+                <h2 class="api-title">🧑‍💼 User API</h2>
+                <p class="api-description">
+                    API для управления пользователями, подрядчиками и заявками на экстренное открытие шкафов.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">🔌</span>
+                        <span>:8080</span>
+                    </span>
+                </div>
+            </a>
+
+            <!-- Locker API -->
+            <a href="#" class="api-card" data-port="8081" target="_blank">
+                <div class="badge">Готово</div>
+                <h2 class="api-title">🗄️ Locker API</h2>
+                <p class="api-description">
+                    API для управления телекоммуникационными шкафами, датчиками, пороговыми значениями и командами.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">🔌</span>
+                        <span>:8081</span>
+                    </span>
+                </div>
+            </a>
+
+            <!-- Locker Device Protocol -->
+            <a href="../services/locker_api/openapi/openapi_relay.md" class="api-card" target="_blank">
+                <div class="badge">Markdown</div>
+                <h2 class="api-title">📡 Locker Device Protocol</h2>
+                <p class="api-description">
+                    MQTT-протокол для устройств (шкафов): релейные платы подключаются через брокер Mosquitto,
+                    отправляют телеметрию датчиков и получают команды. Канонический документ — markdown
+                    <code>openapi_relay.md</code>.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">📄</span>
+                        <span>openapi_relay.md</span>
+                    </span>
+                </div>
+            </a>
+
+            <!-- History API -->
+            <a href="#" class="api-card" data-port="8082" target="_blank">
+                <div class="badge">Готово</div>
+                <h2 class="api-title">📊 History API</h2>
+                <p class="api-description">
+                    API для долгосрочного хранения и аналитики исторических данных: телеметрия датчиков, события безопасности, история команд и фотографии.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">🔌</span>
+                        <span>:8082</span>
+                    </span>
+                </div>
+            </a>
+
+            <!-- Auth API -->
+            <a href="#" class="api-card" data-port="8083" target="_blank">
+                <div class="badge">Готово</div>
+                <h2 class="api-title">🔐 Auth API</h2>
+                <p class="api-description">
+                    API аутентификации: вход по телефону и паролю, двухфакторная проверка OTP, выдача JWT-токенов и управление сессиями.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">🔌</span>
+                        <span>:8083</span>
+                    </span>
+                </div>
+            </a>
+
+            <!-- Notification API -->
+            <a href="#" class="api-card" data-port="8084" target="_blank">
+                <div class="badge">Готово</div>
+                <h2 class="api-title">🔔 Notification API</h2>
+                <p class="api-description">
+                    API подсистемы уведомлений: периодические и однократные СМС, постоянные уведомления внутри системы, фильтрация по тегам и ролям.
+                </p>
+                <div class="api-meta">
+                    <span class="api-version">
+                        <span class="icon">📦</span>
+                        <span>v1.0.0</span>
+                    </span>
+                    <span class="api-port">
+                        <span class="icon">🔌</span>
+                        <span>:8084</span>
+                    </span>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Динамически устанавливаем URL на основе текущего хоста
+        document.addEventListener('DOMContentLoaded', function() {
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol; // http: или https:
+
+            document.querySelectorAll('.api-card[data-port]').forEach(function(card) {
+                const port = card.getAttribute('data-port');
+                card.href = protocol + '//' + hostname + ':' + port;
+            });
+        });
+    </script>
+</body>
+</html>

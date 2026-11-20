@@ -1,0 +1,40 @@
+RemoteUser:
+  type: apiKey
+  in: header
+  name: X-Remote-User
+  description: |
+    Аутентификация через заголовок X-Remote-User для Control Gateway.
+    В заголовке передается ID аутентифицированного пользователя.
+
+    Trust Boundary:
+    - Аутентификация выполняется на API Gateway
+    - Locker API доверяет прокинутому user-context
+    - НЕ выполняется валидация пользователя в БД
+    - User ID используется только для логирования (created_by, updated_by)
+
+    Система проверяет:
+    1. Наличие заголовка X-Remote-User
+    2. Корректность формата (целое число)
+
+    При отсутствии заголовка или некорректных данных возвращается 401 Unauthorized.
+
+    Пример: X-Remote-User: 1
+
+DeviceAuth:
+  type: http
+  scheme: bearer
+  bearerFormat: API_KEY
+  description: |
+    Аутентификация устройств (шкафов) по API key через Bearer token для Device Gateway.
+
+    Формат: Authorization: Bearer <api_key>
+
+    Система проверяет:
+    1. Наличие заголовка Authorization
+    2. Формат "Bearer <token>"
+    3. Валидность API key в базе данных (таблица lockers.auth_key)
+
+    При успешной аутентификации обновляется locker.last_seen_at.
+    При ошибке возвращается 401 Unauthorized.
+
+    Пример: Authorization: Bearer a1b2c3d4e5f6g7h8i9j0

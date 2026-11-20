@@ -1,0 +1,19 @@
+Contractor:
+  type: object
+  description: Модель подрядчика в системе
+  required:
+    - id
+    - name
+    - created_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/ContractorId'
+    name:
+      type: string
+      description: Название подрядчика
+      maxLength: 255
+      example: "ООО Строй-Сервис"
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    created_by:
+      $ref: './common_fields.yaml#/NullableUserId'

@@ -1,0 +1,248 @@
+lockers:
+  get:
+    summary: Получить список шкафов
+    description: |
+      Возвращает список шкафов, **видимых вызывающему**, с возможностью фильтрации по состоянию.
+      Требуется аутентификация через X-Remote-User header.
+
+      Область видимости определяется Допуском (заголовок `X-Remote-Lockers` от ACM):
+      `worker` видит только шкафы с активным Допуском; `operator`, `administrator`
+      и `worker` с признаком полного доступа видят все шкафы.
+      Поле `total` считается по той же области, что и `items` — это число шкафов,
+      видимых вызывающему, а не всего парка.
+      Отсутствие Допусков — не ошибка: ответ `200` с пустым `items` и `total: 0`.
+
+      При `view=location` возвращает сокращённый формат — только id и координаты (`LockerLocation`).
+    operationId: getLockers
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/ConnectivityQuery'
+      - $ref: '../components/parameters.yaml#/DoorQuery'
+      - $ref: '../components/parameters.yaml#/OperationalStatusQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+      - $ref: '../components/parameters.yaml#/ViewQuery'
+      - $ref: '../components/parameters.yaml#/SearchQuery'
+    responses:
+      '200':
+        description: Список шкафов
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/LockerListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Создать новый шкаф
+    description: Создает новый шкаф в системе.
+    operationId: createLocker
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/locker.yaml#/LockerCreate'
+          example:
+            inventory_number: "СО №777"
+            location_address: "г. Москва, ул. Ленина, д. 1"
+            location_lat: 55.751244
+            location_lon: 37.618423
+    responses:
+      '201':
+        description: Шкаф успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/Locker'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '409':
+        $ref: '../components/responses.yaml#/Conflict'
+
+lockers_by_id:
+  get:
+    summary: Получить шкаф по ID
+    description: Возвращает информацию о конкретном шкафе
+    operationId: getLockerById
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    responses:
+      '200':
+        description: Данные шкафа
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/Locker'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  put:
+    summary: Обновить шкаф
+    description: Обновляет данные шкафа
+    operationId: updateLocker
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/locker.yaml#/LockerUpdate'
+    responses:
+      '200':
+        description: Шкаф успешно обновлен
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/Locker'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  delete:
+    summary: Удалить шкаф
+    description: Удаляет шкаф из системы
+    operationId: deleteLocker
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    responses:
+      '204':
+        $ref: '../components/responses.yaml#/NoContent'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+lockers_by_id_state:
+  get:
+    summary: Получить состояние шкафа
+    description: Возвращает текущее состояние шкафа
+    operationId: getLockerState
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    responses:
+      '200':
+        description: Состояние шкафа
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/LockerStateResponse'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+  put:
+    summary: Обновить эксплуатационный статус шкафа
+    description: |
+      Обновляет операционный статус шкафа (normal/maintenance/alarm).
+      Поля connectivity и door управляются автоматически
+      (MQTT-ингестом и результатами команд соответственно).
+    operationId: updateLockerState
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdPath'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/locker.yaml#/LockerStateUpdate'
+    responses:
+      '200':
+        description: Состояние обновлено
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/Locker'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '404':
+        $ref: '../components/responses.yaml#/NotFound'
+
+lockers_batch:
+  post:
+    summary: Получить информацию о нескольких шкафах
+    description: |
+      Возвращает данные шкафов для списка UUID за один запрос.
+
+      Результат ограничен областью видимости вызывающего: запрошенные `locker_ids`
+      пересекаются с Допусками (`X-Remote-Lockers`), шкафы вне области в ответ не
+      попадают. Для `operator`, `administrator` и `worker` с признаком полного
+      доступа ограничения нет. Запрос только «чужих» шкафов — не ошибка: ответ
+      `200` с пустым `items`. На уровне ACM эндпоинт доступен с роли `operator`;
+      пересечение в locker_api — дополнительный рубеж (defense-in-depth).
+
+      Опциональный параметр `view`:
+      `brief` — только id и инвентарный номер;
+      `location` — только id и координаты (lat/lon/address).
+      Без `view` — полный объект `Locker`.
+    operationId: batchGetLockers
+    tags:
+      - Lockers
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/locker.yaml#/BatchLockerRequest'
+          example:
+            locker_ids:
+              - "550e8400-e29b-41d4-a716-446655440000"
+              - "550e8400-e29b-41d4-a716-446655440001"
+            view: location
+    responses:
+      '200':
+        description: Данные запрошенных шкафов
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/locker.yaml#/BatchLockerResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '503':
+        $ref: '../components/responses.yaml#/DatabaseError'

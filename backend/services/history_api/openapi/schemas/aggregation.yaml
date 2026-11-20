@@ -1,0 +1,101 @@
+AggregationType:
+  type: string
+  description: Тип временной агрегации данных
+  enum:
+    - hourly
+    - daily
+    - monthly
+  example: daily
+
+TelemetryAggregation:
+  type: object
+  description: |
+    Предрасчитанный агрегат телеметрии.
+    Создается фоновым сервисом для ускорения аналитических запросов.
+  required:
+    - id
+    - locker_id
+    - sensor_id
+    - sensor_type_code
+    - aggregation_type
+    - period_start
+    - period_end
+    - sample_count
+    - created_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/AggregationId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    sensor_id:
+      $ref: './common_fields.yaml#/SensorId'
+    sensor_type_code:
+      $ref: './common_fields.yaml#/SensorTypeCode'
+    aggregation_type:
+      $ref: '#/AggregationType'
+    period_start:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Начало периода агрегации
+    period_end:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Конец периода агрегации
+    value_avg:
+      type: number
+      format: double
+      nullable: true
+      description: Среднее значение за период
+      example: 24.5
+    value_min:
+      type: number
+      format: double
+      nullable: true
+      description: Минимальное значение за период
+      example: 20.0
+    value_max:
+      type: number
+      format: double
+      nullable: true
+      description: Максимальное значение за период
+      example: 30.0
+    value_sum:
+      type: number
+      format: double
+      nullable: true
+      description: Сумма значений за период
+      example: 588.0
+    value_stddev:
+      type: number
+      format: double
+      nullable: true
+      description: Стандартное отклонение
+      example: 2.3
+    sample_count:
+      type: integer
+      format: int64
+      description: Количество сэмплов в агрегате
+      example: 24
+    created_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Время создания агрегата
+
+AggregationListResponse:
+  type: object
+  description: Список агрегатов телеметрии с пагинацией
+  required: [items, total, limit, offset]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/TelemetryAggregation'
+    total:
+      type: integer
+      example: 365
+    limit:
+      type: integer
+      example: 1000
+    offset:
+      type: integer
+      example: 0

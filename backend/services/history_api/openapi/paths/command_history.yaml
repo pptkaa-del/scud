@@ -1,0 +1,74 @@
+command_history_list:
+  get:
+    summary: Получить историю команд
+    description: |
+      Возвращает историю выполненных команд с фильтрацией.
+      Содержит денормализованные данные пользователей для отчетов.
+    operationId: getCommandHistoryList
+    tags:
+      - Command History
+    security:
+      - RemoteUser: []
+    parameters:
+      - $ref: '../components/parameters.yaml#/LockerIdQuery'
+      - $ref: '../components/parameters.yaml#/UserIdQuery'
+      - $ref: '../components/parameters.yaml#/CommandTypeQuery'
+      - $ref: '../components/parameters.yaml#/CommandStatusQuery'
+      - $ref: '../components/parameters.yaml#/FromDateQuery'
+      - $ref: '../components/parameters.yaml#/ToDateQuery'
+      - $ref: '../components/parameters.yaml#/LimitQuery'
+      - $ref: '../components/parameters.yaml#/OffsetQuery'
+    responses:
+      '200':
+        description: Список команд
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command_history.yaml#/CommandHistoryListResponse'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'
+
+  post:
+    summary: Записать или обновить команду в истории
+    description: |
+      Идемпотентно создаёт или обновляет запись истории команды.
+
+      Запись идентифицируется по `command_id`. Повторные POST с тем же
+      `command_id` сливаются с существующей записью:
+      - `created_at` сохраняется от первой вставки;
+      - `sent_at` / `executed_at` / `failed_at` фиксируются на ПЕРВОМ переходе
+        в соответствующий статус (последующие вызовы их не затирают);
+      - `status`, `result`, `error_message` обновляются при каждом вызове;
+      - денормализованные поля (`locker_inventory_number`, `user_phone`,
+        `user_full_name`) дополняются по мере поступления.
+
+      Это позволяет продьюсерам в locker_api писать переходы статусов
+      (pending → sent → executed/failed) и безопасно ретраить запросы.
+    operationId: createCommandHistory
+    tags:
+      - Command History
+    security:
+      - RemoteUser: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/command_history.yaml#/CommandHistoryCreate'
+    responses:
+      '200':
+        description: Запись создана или обновлена
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/command_history.yaml#/CommandHistory'
+      '400':
+        $ref: '../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../components/responses.yaml#/Unauthorized'
+      '500':
+        $ref: '../components/responses.yaml#/DatabaseError'

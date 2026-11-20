@@ -1,0 +1,77 @@
+User:
+  type: object
+  description: Модель пользователя в системе
+  required:
+    - id
+    - phone
+    - full_name
+    - created_at
+    - updated_at
+    - state
+    - role
+    - require_2fa
+  properties:
+    id:
+      $ref: './common_fields.yaml#/UserId'
+    phone:
+      type: string
+      description: Номер телефона пользователя в формате +79999999999
+      pattern: '^\+7\d{10}$'
+      minLength: 12
+      maxLength: 12
+      example: "+79991234567"
+    full_name:
+      type: string
+      description: Полное имя пользователя
+      example: "Иванов Иван Иванович"
+    contractor_id:
+      $ref: './common_fields.yaml#/NullableContractorId'
+    contractor_name:
+      type: string
+      nullable: true
+      description: Название подрядчика (денормализовано из contractors)
+      example: "ООО Строй-Сервис"
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    created_by:
+      $ref: './common_fields.yaml#/NullableUserId'
+    updated_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    updated_by:
+      $ref: './common_fields.yaml#/NullableUserId'
+    state:
+      $ref: '#/UserState'
+    role:
+      $ref: '#/UserRole'
+    require_2fa:
+      type: boolean
+      description: Включён ли для пользователя второй фактор (2FA). false, если пароль не задан / 2FA выключен.
+      example: true
+    expire_date:
+      allOf:
+        - $ref: './common_fields.yaml#/NullableTimestamp'
+      description: |
+        Дата истечения последнего активного допуска (MAX end_at среди is_active=true).
+        null если нет активных допусков или все они без ограничения срока.
+
+UserState:
+  type: string
+  description: Статус пользователя в системе
+  enum:
+    - active
+    - deactivated
+    - deleted
+  example: active
+
+UserRole:
+  type: string
+  description: |
+    Роль пользователя в системе СКУД
+    - worker: Рабочий - открытие двери, создание заявок на экстренное открытие
+    - operator: Оператор - все привилегии рабочего + управление пользователями, просмотр логов
+    - administrator: Администратор - все привилегии оператора + контроль работоспособности, управление контроллерами
+  enum:
+    - worker
+    - operator
+    - administrator
+  example: worker

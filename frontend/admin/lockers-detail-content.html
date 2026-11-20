@@ -1,0 +1,348 @@
+<header class="content-header">
+    <div class="page-title-section">
+        <div class="header-back-section">
+            <div class="page-title-main">
+                <h2 class="page-title" id="headerInventoryNumber">Шкаф</h2>
+                <p class="page-subtitle" id="headerAddress">Загрузка...</p>
+            </div>
+        </div>
+        <div class="header-actions-row">
+            <div class="cabinet-status-display">
+                <span class="connection-status" id="headerState">
+                    <i class="fas fa-circle"></i>
+                    —
+                </span>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="scroll-container">
+    <div id="loadingState" class="locker-loading">
+        <div class="spinner"></div>
+        <p>Загрузка данных шкафа...</p>
+    </div>
+
+    <div id="errorState" class="locker-error" style="display:none;">
+        <div class="empty-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <h3 id="errorTitle">Ошибка загрузки</h3>
+        <p id="errorMessage">Не удалось получить данные о шкафе.</p>
+    </div>
+
+    <!-- Переименован: был #mainContent, конфликтовал с оболочкой SPA -->
+    <div id="lockerDetailContent" class="locker-detail-container" style="display:none;">
+        <div class="info-card">
+            <div class="card-header">
+                <h3><i class="fas fa-info-circle"></i> Основная информация</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Инвентарный номер</span>
+                        <div class="info-value-row" data-field="inventory_number">
+                            <span class="info-value info-value--editable" id="infoInventoryNumber">—</span>
+                            <div class="info-edit-actions">
+                                <button type="button" class="info-edit-btn" data-action="edit" title="Редактировать"><i class="fas fa-pencil-alt"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--save" data-action="save" title="Сохранить" style="display:none;"><i class="fas fa-check"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--cancel" data-action="cancel" title="Отменить" style="display:none;"><i class="fas fa-times"></i></button>
+                                <span class="info-edit-spinner" style="display:none;"><i class="fas fa-spinner fa-spin"></i></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Состояние</span>
+                        <span id="infoState">—</span>
+                    </div>
+                    <div class="info-item info-item--full">
+                        <span class="info-label">UUID</span>
+                        <span class="info-value info-value--mono" id="infoId">—</span>
+                    </div>
+                    <div class="info-item info-item--full">
+                        <span class="info-label">Адрес</span>
+                        <div class="info-value-row" data-field="location_address">
+                            <span class="info-value info-value--editable" id="infoAddress">—</span>
+                            <div class="info-edit-actions">
+                                <button type="button" class="info-edit-btn" data-action="edit" title="Редактировать"><i class="fas fa-pencil-alt"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--save" data-action="save" title="Сохранить" style="display:none;"><i class="fas fa-check"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--cancel" data-action="cancel" title="Отменить" style="display:none;"><i class="fas fa-times"></i></button>
+                                <span class="info-edit-spinner" style="display:none;"><i class="fas fa-spinner fa-spin"></i></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Дата последнего открытия</span>
+                        <span class="info-value" id="infoLastSeen">—</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Дата и время создания</span>
+                        <span class="info-value" id="infoCreatedAt">—</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Дата и время обновления</span>
+                        <span class="info-value" id="infoUpdatedAt">—</span>
+                    </div>
+                    <div class="info-item info-item--full">
+                        <span class="info-label">Координаты</span>
+                        <div class="info-value-row" data-field="coordinates">
+                            <span class="info-value info-value--editable" id="infoCoordinates">—</span>
+                            <div class="info-edit-actions">
+                                <button type="button" class="info-edit-btn" data-action="edit" title="Редактировать"><i class="fas fa-pencil-alt"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--save" data-action="save" title="Сохранить" style="display:none;"><i class="fas fa-check"></i></button>
+                                <button type="button" class="info-edit-btn info-edit-btn--cancel" data-action="cancel" title="Отменить" style="display:none;"><i class="fas fa-times"></i></button>
+                                <span class="info-edit-spinner" style="display:none;"><i class="fas fa-spinner fa-spin"></i></span>
+                            </div>
+                        </div>
+                        <span class="info-edit-hint" id="infoCoordinatesHint" style="display:none;">Формат: широта, долгота — например 55.752244, 37.619423</span>
+                    </div>
+                </div>
+
+                <div id="lastOpenerSection" style="display:none;">
+                    <div class="info-divider--locker"></div>
+                    <div class="info-grid">
+                        <div class="info-item info-item--full">
+                            <span class="info-label"><i class="fas fa-user-clock"></i> Последний открывавший</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Имя</span>
+                            <span class="info-value" id="lastOpenerName">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Организация</span>
+                            <span class="info-value" id="lastOpenerOrg">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Телефон</span>
+                            <span class="info-value" id="lastOpenerPhone">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sensorsSection" class="info-card sensors-card" style="display:none;">
+            <div class="card-header">
+                <h3><i class="fas fa-tachometer-alt"></i> Показания датчиков</h3>
+                <button class="sensors-refresh-btn" id="sensorsRefreshBtn" title="Обновить показания">
+                    <i class="fas fa-sync-alt"></i> Обновить
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="sensorsList" class="sensors-grid"></div>
+            </div>
+        </div>
+
+        <div id="relayBlockMount"></div>
+
+        <div id="doorControlCard" class="info-card door-control-card" style="display:none;">
+            <div class="card-header">
+                <h3><i class="fas fa-door-open"></i> Управление дверью</h3>
+            </div>
+            <div class="card-body">
+                <div id="doorOfflineNotice" class="door-offline-notice" style="display:none;">
+                    <i class="fas fa-plug"></i>
+                    <span>Шкаф недоступен — управление заблокировано</span>
+                </div>
+
+                <div class="door-stage active" id="doorStage1">
+                    <div id="doorStage1Start">
+                        <div class="door-stage-header">
+                            <div class="door-stage-num">1</div>
+                            <div class="door-stage-title">Ожидание</div>
+                        </div>
+                        <p class="door-stage-text">Нажмите кнопку, чтобы открыть дверь</p>
+                        <button class="btn-primary door-btn-start" id="doorRequestCodeBtn">
+                            <i class="fas fa-door-open"></i> Открыть дверь
+                        </button>
+                        <div class="door-verify-spinner" id="doorVerifySpinner" style="display:none;">
+                            <div class="spinner"></div>
+                            <span>Открытие двери...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="door-stage" id="doorStage2">
+                    <div class="door-stage-header">
+                        <div class="door-stage-num">2</div>
+                        <div class="door-stage-title">Дверь открыта</div>
+                    </div>
+                    <div class="door-timer">
+                        <i class="fas fa-clock"></i>
+                        <span>Время с открытия: <strong id="doorWorkTimer">00:00:00</strong></span>
+                    </div>
+                    <div class="door-actions">
+                        <button class="btn-primary" id="doorCloseBtn"><i class="fas fa-door-closed"></i> Закрыть дверь</button>
+                        <div class="door-verify-spinner" id="doorCloseSpinner" style="display:none;">
+                            <div class="spinner"></div>
+                            <span>Закрытие двери...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="door-stage" id="doorStage3">
+                    <div class="door-stage-header">
+                        <div class="door-stage-num door-stage-num--done">3</div>
+                        <div class="door-stage-title">Операция завершена</div>
+                    </div>
+                    <div class="door-completion">
+                        <div class="door-completion-icon"><i class="fas fa-check-circle"></i></div>
+                        <h4>Дверь закрыта</h4>
+                        <p>Операция успешно завершена</p>
+                        <button class="btn-secondary" id="doorResetBtn"><i class="fas fa-redo"></i> Начать заново</button>
+                    </div>
+                </div>
+
+                <div class="door-stage" id="door2faStage" style="display:none;">
+                    <div class="door-stage-header">
+                        <div class="door-stage-num"><i class="fas fa-shield-alt"></i></div>
+                        <div class="door-stage-title">Подтверждение кода</div>
+                    </div>
+                    <p class="door-stage-text">На ваш аккаунт отправлен код подтверждения. Введите 6 цифр, чтобы продолжить.</p>
+                    <div class="door-2fa-inputs">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode1">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode2">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode3">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode4">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode5">
+                        <input type="text" inputmode="numeric" maxlength="1" class="door-2fa-input" id="door2faCode6">
+                    </div>
+                    <div class="door-2fa-error" id="door2faError" style="display:none;"></div>
+                    <div class="door-actions">
+                        <button class="btn-secondary" id="door2faCancelBtn"><i class="fas fa-times"></i> Отмена</button>
+                        <button class="btn-primary" id="door2faConfirmBtn"><i class="fas fa-check"></i> Подтвердить</button>
+                        <div class="door-verify-spinner" id="door2faSpinner" style="display:none;">
+                            <div class="spinner"></div>
+                            <span>Проверка кода...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="emergencyRequestCard" class="info-card emergency-request-card" style="display:none;">
+            <div class="card-header">
+                <h3>
+                    <i class="fas fa-hand-paper"></i> Запрошена помощь
+                    <span id="emergencyRequestCount" class="emergency-request-count" style="display:none;">0</span>
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">ФИО</span>
+                        <span class="info-value" id="emergencyRequestName">—</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Телефон</span>
+                        <span class="info-value" id="emergencyRequestPhone">—</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Дата запроса</span>
+                        <span class="info-value" id="emergencyRequestCreatedAt">—</span>
+                    </div>
+                </div>
+
+                <div class="emergency-request-actions">
+                    <button class="btn-primary" id="emergencyRequestResolveBtn">
+                        <i class="fas fa-check"></i> Помощь оказана
+                    </button>
+                    <div class="door-verify-spinner" id="emergencyRequestResolveSpinner" style="display:none;">
+                        <div class="spinner"></div>
+                        <span>Отправка...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="statusResetCard" class="info-card status-reset-card" style="display:none;">
+            <div class="card-header">
+                <h3><i class="fas fa-wrench"></i> Изменить статус</h3>
+            </div>
+            <div class="card-body">
+                <p class="status-reset-text">Перевести шкаф в нормальное состояние</p>
+                <button class="btn-primary" id="statusResetBtn">
+                    <i class="fas fa-check"></i> Изменить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модалка: сброс статуса шкафа -->
+<div class="new-modal-overlay" id="statusResetModal">
+    <div class="new-modal">
+        <div class="new-modal-header">
+            <h3><i class="fas fa-wrench"></i> Изменение статуса</h3>
+            <button class="new-modal-close" id="statusResetModalClose"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="new-modal-content">
+            <p>Изменить статус шкафа на нормальное и сбросить ошибки?</p>
+        </div>
+        <div class="new-modal-actions">
+            <button class="btn-secondary" id="statusResetModalCancel">Отменить</button>
+            <button class="btn-primary" id="statusResetModalConfirm">
+                <i class="fas fa-check"></i> Изменить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Модалка: настройки датчика -->
+<div class="new-modal-overlay" id="sensorSettingsModal">
+    <div class="new-modal">
+        <div class="new-modal-header">
+            <h3><i class="fas fa-cog"></i> Настройки датчика</h3>
+            <button class="new-modal-close" id="sensorSettingsModalClose"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="new-modal-content">
+            <p class="sensor-settings-name" id="sensorSettingsName"></p>
+            <div class="sensor-settings-toggle-row">
+                <span>Датчик активен</span>
+                <label class="sensor-toggle">
+                    <input type="checkbox" id="sensorSettingsActive">
+                    <span class="sensor-toggle-slider"></span>
+                </label>
+            </div>
+            <div id="sensorSettingsThresholds">
+                <div class="sensor-settings-fields">
+                    <div class="sensor-settings-field">
+                        <label for="sensorSettingsMin">Минимальное значение</label>
+                        <input type="number" id="sensorSettingsMin" step="any">
+                    </div>
+                    <div class="sensor-settings-field">
+                        <label for="sensorSettingsMax">Максимальное значение</label>
+                        <input type="number" id="sensorSettingsMax" step="any">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="new-modal-actions">
+            <button class="btn-secondary" id="sensorSettingsModalCancel">Отмена</button>
+            <button class="btn-primary" id="sensorSettingsModalSave">
+                <i class="fas fa-save"></i> Сохранить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Модалка: подтверждение закрытия -->
+<div class="new-modal-overlay" id="doorCloseModal">
+    <div class="new-modal">
+        <div class="new-modal-header">
+            <h3><i class="fas fa-door-closed"></i> Закрытие двери</h3>
+            <button class="new-modal-close" id="doorCloseModalClose"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="new-modal-content">
+            <p>Подтвердите закрытие двери:</p>
+            <div class="door-modal-summary">
+                <p><strong>Шкаф:</strong> <span id="doorModalInventory">—</span></p>
+                <p><strong>Адрес:</strong> <span id="doorModalAddress">—</span></p>
+            </div>
+        </div>
+        <div class="new-modal-actions">
+            <button class="btn-secondary" id="doorCloseModalCancel">Отмена</button>
+            <button class="btn-primary" id="doorCloseModalConfirm">
+                <i class="fas fa-door-closed"></i> Закрыть дверь
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,22 @@
+# hadolint config — линтер Dockerfile'ов в CI job `lint`.
+# Учитываем специфику Astra Linux: `apt` без pinning, контролируемое
+# отсутствие `--no-install-recommends` (мы его используем) и удаление
+# extended-repository через sed перед production install.
+
+ignored:
+  # Astra использует snapshot URL `frozen/1.8.5/main-repository` — содержимое
+  # snapshot уже immutable, явный pin `package=version` маинтенанс-нагрузка
+  # без security gain и ломается при апгрейде snapshot pin.
+  - DL3008
+  # --no-install-recommends используется во всех Dockerfile.
+  - DL3015
+  # Astra-сообщество исторически использует `apt` (а не `apt-get`); смена
+  # на `apt-get` ломает onboarding-документацию и образцы.
+  - DL3027
+  # `curl -fsSL` достаточно для CI; -O не нужен — мы передаём `-o <path>`.
+  - DL3047
+
+trustedRegistries:
+  - registry.astralinux.ru
+  - docker.io
+  - ghcr.io

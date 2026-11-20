@@ -1,0 +1,27 @@
+Unauthorized:
+  description: Отсутствует или невалидный X-Remote-User заголовок
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+
+BadRequest:
+  description: Невалидные данные запроса
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+
+NotFound:
+  description: Ресурс не найден
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+
+DatabaseError:
+  description: Ошибка базы данных
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'

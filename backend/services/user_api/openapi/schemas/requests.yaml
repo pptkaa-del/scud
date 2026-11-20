@@ -1,0 +1,90 @@
+CreateUserRequest:
+  type: object
+  description: Запрос на создание нового пользователя
+  required:
+    - phone
+    - full_name
+  properties:
+    phone:
+      type: string
+      description: Номер телефона пользователя в формате +79999999999 (должен быть уникальным)
+      pattern: '^\+7\d{10}$'
+      minLength: 12
+      maxLength: 12
+      example: "+79991234567"
+    full_name:
+      type: string
+      description: Полное имя пользователя
+      example: "Иванов Иван Иванович"
+    contractor_id:
+      $ref: './common_fields.yaml#/NullableContractorId'
+    role:
+      type: string
+      enum: [worker, operator, administrator]
+      description: Роль пользователя (по умолчанию worker)
+      example: worker
+    password:
+      type: string
+      description: |
+        Пароль пользователя (минимум 8 символов).
+        Если не указан — пользователь создаётся без пароля и не сможет войти
+        до тех пор, пока пароль не будет установлен отдельно.
+      minLength: 8
+      example: "secret123"
+      writeOnly: true
+
+UpdateUserRequest:
+  type: object
+  description: |
+    Запрос на частичное обновление пользователя (PATCH).
+    Все поля опциональны — передаются только изменяемые.
+    Хотя бы одно поле должно быть указано.
+  properties:
+    phone:
+      type: string
+      description: Новый номер телефона в формате +79999999999 (должен быть уникальным)
+      pattern: '^\+7\d{10}$'
+      minLength: 12
+      maxLength: 12
+      example: "+79997654321"
+    full_name:
+      type: string
+      description: Новое полное имя пользователя
+      example: "Иванов Иван Петрович"
+    role:
+      type: string
+      enum: [worker, operator, administrator]
+      description: Новая роль пользователя
+      example: operator
+    contractor_id:
+      $ref: './common_fields.yaml#/NullableContractorId'
+    password:
+      type: string
+      description: Новый пароль (минимум 8 символов)
+      minLength: 8
+      example: "newsecret123"
+      writeOnly: true
+
+CreateContractorRequest:
+  type: object
+  description: Запрос на создание нового подрядчика
+  required:
+    - name
+  properties:
+    name:
+      type: string
+      description: Название подрядчика
+      maxLength: 255
+      example: "ООО Строй-Сервис"
+
+UpdateContractorRequest:
+  type: object
+  description: Запрос на обновление данных подрядчика
+  required:
+    - name
+  properties:
+    name:
+      type: string
+      description: Название подрядчика
+      maxLength: 255
+      example: "ООО Строй-Сервис Плюс"

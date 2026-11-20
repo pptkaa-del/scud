@@ -1,0 +1,808 @@
+/* security.css - Стили для модуля безопасности */
+
+/* Общие отступы */
+.scroll-container {
+    padding: 24px;
+}
+
+/* Контейнер для алерта - без прилипания к краям */
+.threat-alert-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    min-width: 360px;
+    max-width: 480px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(255, 71, 87, 0.3);
+    animation: slideInRight 0.4s ease-out;
+    display: none;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Компактный алерт угрозы */
+.threat-alert {
+    background: linear-gradient(135deg, #ff4757, #ff3838);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.threat-alert-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.threat-alert-icon {
+    font-size: 28px;
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.threat-alert-content {
+    flex: 1;
+}
+
+.threat-alert-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    color: white;
+}
+
+.threat-alert-description {
+    font-size: 14px;
+    margin: 0;
+    opacity: 0.9;
+}
+
+.threat-count {
+    font-weight: 700;
+    font-size: 16px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.threat-alert-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.btn-alert {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.btn-alert:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.btn-alert-close {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.btn-alert-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Фильтр Все / Новые */
+.incidents-filter-group {
+    display: flex;
+    background: #f0f2f5;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.incidents-filter-btn {
+    background: transparent;
+    border: none;
+    padding: 7px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.incidents-filter-btn:hover {
+    color: var(--dark-color);
+}
+
+.incidents-filter-btn.active {
+    background: white;
+    color: var(--dark-color);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* Поисковая строка */
+.security-search-container {
+    min-width: 260px;
+    max-width: 320px;
+}
+
+.page-title-section {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+    width: 100%;
+}
+
+.page-title-main {
+    flex: 1;
+    min-width: 200px;
+}
+
+.security-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 6px 12px;
+    height: 43px;
+    transition: var(--transition);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.security-search-box:focus-within {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.security-search-box i {
+    color: var(--gray-color);
+    margin-right: 8px;
+    font-size: 14px;
+}
+
+.security-search-box input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    color: var(--dark-color);
+    background: transparent;
+    padding: 2px 0;
+    min-width: 0;
+}
+
+.security-search-box input::placeholder {
+    color: #a0a0a0;
+}
+
+.search-clear {
+    background: none;
+    border: none;
+    color: var(--gray-color);
+    cursor: pointer;
+    padding: 4px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    margin-left: 6px;
+}
+
+.search-clear:hover {
+    color: var(--dark-color);
+}
+
+/* Лента инцидентов */
+.incidents-feed {
+    background: white;
+    border-radius: 16px;
+    box-shadow: var(--box-shadow);
+    padding: 24px;
+    min-height: 400px;
+    margin-bottom: 24px;
+    border: 1px solid #e9ecef;
+}
+
+.incidents-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.incidents-header h3 {
+    margin: 0;
+    color: var(--dark-color);
+    font-size: 20px;
+}
+
+.incidents-count {
+    font-size: 15px;
+    color: var(--gray-color);
+    font-weight: 500;
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border-radius: 20px;
+}
+
+.incidents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 24px;
+}
+
+.incident-card {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    border: 2px solid #e9ecef;
+    position: relative;
+}
+
+.incident-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    border-color: #d0d0d0;
+}
+
+.incident-card.new::before {
+    content: 'НОВЫЙ';
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    background: var(--danger-color);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    z-index: 2;
+    animation: newPulse 3s infinite;
+}
+
+@keyframes newPulse {
+    0%, 100% { 
+        background: var(--danger-color);
+        box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7);
+    }
+    50% { 
+        background: #ff3838;
+        box-shadow: 0 0 0 6px rgba(255, 71, 87, 0);
+    }
+}
+
+.incident-card.viewed {
+    border-color: #e0e0e0;
+    background: #fafafa;
+}
+
+.incident-card.viewed .incident-type {
+    background: var(--gray-color);
+}
+
+.incident-header {
+    padding: 20px 24px 16px 24px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.incident-type {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+    background: var(--danger-color);
+    flex-shrink: 0;
+}
+
+.incident-time {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: var(--dark-color);
+    font-weight: 600;
+    text-align: right;
+    line-height: 1.4;
+    justify-content: flex-end;
+}
+
+.incident-photo {
+    position: relative;
+    height: 180px;
+    background: #f0f2f5;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.incident-photo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    cursor: zoom-in;
+    transition: transform 0.3s ease;
+}
+
+.incident-photo-img:hover {
+    transform: scale(1.03);
+}
+
+.photo-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    text-align: center;
+    padding: 20px;
+}
+
+.photo-placeholder i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.photo-placeholder span {
+    font-size: 15px;
+    font-weight: 500;
+    color: #aaa;
+}
+
+.incident-info {
+    padding: 20px 24px 24px 24px;
+}
+
+.incident-location {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.incident-location i {
+    color: var(--secondary-color);
+    font-size: 18px;
+}
+
+.location-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark-color);
+}
+
+.incident-description {
+    font-size: 15px;
+    color: var(--gray-color);
+    line-height: 1.6;
+    margin-bottom: 24px;
+    min-height: 48px;
+}
+
+.incident-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.btn-incident {
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: var(--transition);
+    border: none;
+}
+
+.btn-view {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-view:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.btn-mark {
+    background: #f8f9fa;
+    color: var(--dark-color);
+    border: 2px solid #e0e0e0;
+}
+
+.btn-mark:hover {
+    background: #e9ecef;
+    border-color: #d0d0d0;
+    transform: translateY(-2px);
+}
+
+.btn-incident:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-locker-link {
+    background: #f0f8ff;
+    color: var(--primary-color);
+    /*border: 2px solid rgba(52, 152, 219, 0.3);*/
+    border: 2px solid rgba(98, 167, 68, 0.2);
+    text-decoration: none;
+}
+
+.btn-locker-link:hover {
+    background: var(--secondary-color);
+    color: white;
+    border-color: var(--secondary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(98, 167, 68, 0.3);
+}
+
+.no-video-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--gray-color);
+}
+
+/* Пустое состояние */
+.empty-state {
+    text-align: center;
+    padding: 60px 40px;
+    display: none;
+}
+
+.empty-icon {
+    font-size: 72px;
+    color: var(--success-color);
+    margin-bottom: 24px;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    color: var(--dark-color);
+    margin-bottom: 12px;
+    font-size: 24px;
+}
+
+.empty-state p {
+    color: var(--gray-color);
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+/* Модальное окно подтверждения */
+.modal-header {
+    padding: 24px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--dark-color);
+    font-size: 20px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--gray-color);
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.modal-close:hover {
+    background: #f5f5f5;
+    color: var(--dark-color);
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-footer {
+    padding: 20px 24px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Статусные бейджи */
+.status-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.new {
+    background: rgba(255, 71, 87, 0.1);
+    color: var(--danger-color);
+    border: 2px solid rgba(255, 71, 87, 0.2);
+}
+
+.status-badge.viewed {
+    background: rgba(52, 152, 219, 0.1);
+    color: var(--secondary-color);
+    border: 2px solid rgba(52, 152, 219, 0.2);
+}
+
+
+/* Анимации для карточек */
+@keyframes cardAppear {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.incident-card {
+    animation: cardAppear 0.4s ease-out;
+}
+
+.incident-card:nth-child(1) { animation-delay: 0.05s; }
+.incident-card:nth-child(2) { animation-delay: 0.1s; }
+.incident-card:nth-child(3) { animation-delay: 0.15s; }
+.incident-card:nth-child(4) { animation-delay: 0.2s; }
+.incident-card:nth-child(5) { animation-delay: 0.25s; }
+.incident-card:nth-child(6) { animation-delay: 0.3s; }
+
+/* Адаптивность */
+@media (max-width: 1200px) {
+    .incidents-grid {
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    }
+}
+
+
+@media (max-width: 768px) {
+    .scroll-container {
+        padding: 16px;
+    }
+    
+    .threat-alert-container {
+        top: 10px;
+        right: 10px;
+        min-width: 0;
+        max-width: calc(100vw - 20px);
+    }
+
+    .threat-alert {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .threat-alert-actions {
+        justify-content: space-between;
+    }
+    
+    .header-actions-row {
+        width: 100%;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .security-search-container {
+        min-width: 100%;
+        max-width: 100%;
+    }
+
+    .incidents-grid {
+        grid-template-columns: 1fr;
+    }
+    
+}
+
+@media (max-width: 480px) {
+    .incident-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .incident-time {
+        text-align: left;
+    }
+    
+    .incident-actions {
+        flex-direction: column;
+    }
+    
+}
+
+/* Карусель фото */
+.incident-carousel {
+    position: relative;
+    height: 180px;
+    background: #f0f2f5;
+    overflow: hidden;
+}
+
+.carousel-slides {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.carousel-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.carousel-slide.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.carousel-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.45);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 3;
+    transition: background 0.2s;
+}
+
+.carousel-btn:hover {
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.carousel-prev { left: 8px; }
+.carousel-next { right: 8px; }
+
+.carousel-dots {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 3;
+}
+
+.carousel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s;
+}
+
+.carousel-dot.active {
+    background: white;
+}
+
+.carousel-counter {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    z-index: 3;
+    font-family: 'Courier New', monospace;
+}
+
+/* Утилитарные классы */
+.show {
+    display: block !important;
+}
+
+.flex {
+    display: flex !important;
+}
+
+.hidden {
+    display: none !important;
+}

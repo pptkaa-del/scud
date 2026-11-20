@@ -1,0 +1,51 @@
+# RFC 7807 Problem Details for HTTP APIs
+# https://www.rfc-editor.org/rfc/rfc7807
+
+ProblemDetails:
+  type: object
+  description: |
+    RFC 7807 Problem Details - стандартный формат ошибок HTTP API.
+    Используется для всех error responses (4xx и 5xx статусы).
+
+    Зарегистрированные значения `type`:
+    - https://api.scuddocs.com/problems/validation-error
+    - https://api.scuddocs.com/problems/invalid-json
+    - https://api.scuddocs.com/problems/unauthorized
+    - https://api.scuddocs.com/problems/not-found
+    - https://api.scuddocs.com/problems/internal-error
+    - https://api.scuddocs.com/problems/database-error
+  required:
+    - type
+    - title
+    - status
+    - detail
+  properties:
+    type:
+      type: string
+      description: |
+        URI reference идентифицирующий тип проблемы. Список значений см. выше.
+      example: "https://api.scuddocs.com/problems/validation-error"
+    title:
+      type: string
+      description: Короткое читаемое описание типа проблемы
+      example: "Validation Error"
+    status:
+      type: integer
+      description: HTTP status code
+      minimum: 400
+      maximum: 599
+      example: 400
+    detail:
+      type: string
+      description: Детальное описание конкретной ошибки
+      example: "Invalid request body structure: Missing 'readings' field"
+    instance:
+      type: string
+      nullable: true
+      description: URI reference конкретного occurrence проблемы (обычно request path)
+      example: "/api/v1/telemetry"
+    timestamp:
+      type: string
+      format: date-time
+      description: Время возникновения ошибки в ISO 8601 формате
+      example: "2024-01-15T10:30:00.123Z"

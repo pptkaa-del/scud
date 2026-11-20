@@ -1,0 +1,145 @@
+BadRequest:
+  description: Некорректный запрос (отсутствуют обязательные поля или неверный формат)
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingFields:
+          summary: Отсутствуют обязательные поля
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: phone and full_name are required"
+            instance: "/api/v1/users"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidInput:
+          summary: Некорректный ввод
+          value:
+            type: "https://api.scuddocs.com/problems/validation-error"
+            title: "Validation Error"
+            status: 400
+            detail: "Invalid request body structure: Phone number format is invalid"
+            instance: "/api/v1/users"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Unauthorized:
+  description: Требуется аутентификация или аутентификация не прошла
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        missingHeader:
+          summary: Отсутствует заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Missing X-Remote-User header"
+            instance: "/api/v1/users"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        invalidHeader:
+          summary: Некорректный заголовок X-Remote-User
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Invalid X-Remote-User header"
+            instance: "/api/v1/users"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        userNotFound:
+          summary: Пользователь из заголовка не найден
+          value:
+            type: "https://api.scuddocs.com/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "User not found"
+            instance: "/api/v1/users/123"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+Forbidden:
+  description: |
+    Недостаточно прав. Возвращается, когда роль вызывающего не позволяет
+    выполнить операцию над целевым пользователем (защита от эскалации
+    привилегий): попытка назначить роль выше своей, изменить роль/пароль/2FA
+    пользователя с равной или более высокой ролью, либо повысить собственную
+    роль. Администратор не ограничен.
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        cannotAssignHigherRole:
+          summary: Попытка назначить роль выше своей
+          value:
+            type: "https://api.scuddocs.com/problems/forbidden"
+            title: "Forbidden"
+            status: 403
+            detail: "Cannot assign a role higher than your own"
+            instance: "/api/v1/user/42"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        cannotModifyTarget:
+          summary: Попытка изменить пользователя с равной/более высокой ролью
+          value:
+            type: "https://api.scuddocs.com/problems/forbidden"
+            title: "Forbidden"
+            status: 403
+            detail: "Insufficient privileges to modify this user"
+            instance: "/api/v1/user/1"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+NotFound:
+  description: Запрошенный ресурс не найден
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/not-found"
+        title: "Not Found"
+        status: 404
+        detail: "User not found"
+        instance: "/api/v1/users/123"
+        timestamp: "2024-01-15T10:30:00.123Z"
+
+Conflict:
+  description: Конфликт (ресурс уже существует или находится в несовместимом состоянии)
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      examples:
+        alreadyExists:
+          summary: Ресурс уже существует
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "User with this phone already exists"
+            instance: "/api/v1/users"
+            timestamp: "2024-01-15T10:30:00.123Z"
+        alreadyClosed:
+          summary: Заявка уже закрыта
+          value:
+            type: "https://api.scuddocs.com/problems/conflict"
+            title: "Conflict"
+            status: 409
+            detail: "This request has already been closed"
+            instance: "/api/v1/emergency-request/42"
+            timestamp: "2024-01-15T10:30:00.123Z"
+
+DatabaseError:
+  description: Ошибка базы данных
+  content:
+    application/problem+json:
+      schema:
+        $ref: '../schemas/error.yaml#/ProblemDetails'
+      example:
+        type: "https://api.scuddocs.com/problems/database-error"
+        title: "Database Error"
+        status: 503
+        detail: "Database connection timeout"
+        instance: "/api/v1/users"
+        timestamp: "2024-01-15T10:30:00.123Z"

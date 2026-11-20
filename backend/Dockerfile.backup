@@ -1,0 +1,42 @@
+FROM registry.astralinux.ru/library/astra/ubi18-postgresql15:1.8.5
+LABEL authors="lokotkov"
+
+# Backup-sidecar для 6 postgres-серверов.
+#
+# Базовый образ ubi18-postgresql15 уже содержит pg_dump. cron в
+# сертифицированном `main` репозитории Astra Linux отсутствует, поэтому
+# планировщик реализован простым bash-loop'ом с `sleep 86400` (раз в сутки).
+# python3-croniter / python3-crontab формально доступны в `main`, но для
+# фиксированного расписания "раз в сутки" зависимость избыточна.
+
+# В образе только то, что уже есть в base + наш скрипт. Никаких apt install.
+
+# Базовый образ запускается под пользователем postgres (uid 100). Для
+# создания каталогов и chmod нужен root — переключаемся явно, потом
+# откатываемся обратно для безопасности.
+USER root
+
+# Копируем backup-скрипт с executable bit.
+COPY --chmod=0755 scripts/backup.sh /scripts/backup.sh
+RUN mkdir -p /backups /var/log \
+    && chown -R postgres:postgres /backups /var/log /scripts
+
+# BACKUP_INTERVAL_SECONDS — период между запусками (default 86400 = сутки).
+# BACKUP_RETENTION_DAYS — TTL дампов в днях (default 7).
+ENV BACKUP_INTERVAL_SECONDS=86400 \
+    BACKUP_RETENTION_DAYS=7 \
+    BACKUP_DIR=/backups
+
+# Возвращаемся в postgres-юзер для рантайма (pg_dump не должен бежать под root).
+USER postgres
+
+# Foreground loop: запустить backup сразу, потом раз в BACKUP_INTERVAL_SECONDS.
+# Лог пишется и в stdout (docker logs), и в файл на volume backup_data
+# (${BACKUP_DIR}/backup.log) — переживает рестарт контейнера и лежит рядом
+# с дампами. Перед каждым tee-append лог усекается до последних 5000 строк,
+# чтобы не рос бесконечно (раньше писался в слой контейнера через
+# /var/log/backup.log — терялся при пересоздании и рос без ограничения).
+# bash (не sh): pipe `backup.sh | tee` маскирует exit-код скрипта статусом tee,
+# поэтому берём настоящий код из ${PIPESTATUS[0]} и явно логируем провал цикла —
+# иначе exit 2 из backup.sh (хотя бы одна БД не сдамплена) тонул бы незаметно.
+CMD ["bash", "-c", "LOG=\"${BACKUP_DIR}/backup.log\"; while true; do [ -f \"$LOG\" ] && tail -n 5000 \"$LOG\" > \"$LOG.tmp\" && mv \"$LOG.tmp\" \"$LOG\"; /scripts/backup.sh 2>&1 | tee -a \"$LOG\"; rc=${PIPESTATUS[0]}; [ \"$rc\" -ne 0 ] && echo \"[$(date -u +%FT%TZ)] backup cycle failed (exit $rc)\" | tee -a \"$LOG\"; sleep \"${BACKUP_INTERVAL_SECONDS}\"; done"]

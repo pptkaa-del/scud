@@ -1,0 +1,33 @@
+LoginRequest:
+  type: object
+  required:
+    - phone
+    - password
+  properties:
+    phone:
+      type: string
+      description: Номер телефона в формате +7XXXXXXXXXX
+      pattern: '^\+7\d{10}$'
+      example: "+79991234567"
+    password:
+      type: string
+      description: Пароль пользователя
+      minLength: 1
+      example: "changeme"
+
+VerifyRequest:
+  type: object
+  required:
+    - phone
+    - code
+  properties:
+    phone:
+      type: string
+      description: Номер телефона (тот же, что при /login)
+      pattern: '^\+7\d{10}$'
+      example: "+79991234567"
+    code:
+      type: string
+      description: 6-значный OTP из SMS
+      pattern: '^\d{6}$'
+      example: "123456"

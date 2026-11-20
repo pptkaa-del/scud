@@ -1,0 +1,131 @@
+EmergencyRequest:
+  type: object
+  description: Заявка на экстренное открытие шкафа
+  properties:
+    id:
+      $ref: './common_fields.yaml#/RequestId'
+    user_id:
+      $ref: './common_fields.yaml#/UserId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    status:
+      type: string
+      enum: [pending, closed]
+      description: Статус заявки
+      example: pending
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    closed_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    closed_by:
+      $ref: './common_fields.yaml#/NullableUserId'
+  required:
+    - id
+    - user_id
+    - locker_id
+    - status
+    - created_at
+
+EmergencyRequestWithDetails:
+  type: object
+  description: Расширенная информация о заявке с деталями пользователей
+  properties:
+    id:
+      $ref: './common_fields.yaml#/RequestId'
+    user_id:
+      $ref: './common_fields.yaml#/UserId'
+    user_full_name:
+      type: string
+      description: ФИО пользователя, подавшего заявку
+      example: "Иванов Иван Иванович"
+    user_phone:
+      type: string
+      description: Телефон пользователя
+      example: "+79001234567"
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    status:
+      type: string
+      enum: [pending, closed]
+      description: Статус заявки
+      example: pending
+    created_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    closed_at:
+      $ref: './common_fields.yaml#/NullableTimestamp'
+    closed_by:
+      $ref: './common_fields.yaml#/NullableUserId'
+    closed_by_full_name:
+      type: string
+      nullable: true
+      description: ФИО пользователя, закрывшего заявку
+      example: "Петров Петр Петрович"
+  required:
+    - id
+    - user_id
+    - user_full_name
+    - user_phone
+    - locker_id
+    - status
+    - created_at
+
+EmergencyRequestLog:
+  type: object
+  description: Запись лога действий с заявкой (audit trail)
+  properties:
+    id:
+      $ref: './common_fields.yaml#/IdField'
+    request_id:
+      $ref: './common_fields.yaml#/RequestId'
+    action:
+      type: string
+      enum: [created, closed, viewed]
+      description: Тип действия
+      example: created
+    performed_by:
+      $ref: './common_fields.yaml#/UserId'
+    performed_at:
+      $ref: './common_fields.yaml#/Timestamp'
+    details:
+      type: object
+      nullable: true
+      description: Дополнительные детали действия (JSON)
+      additionalProperties: true
+      example:
+        locker_id: '550e8400-e29b-41d4-a716-446655440000'
+  required:
+    - id
+    - request_id
+    - action
+    - performed_by
+    - performed_at
+
+CreateEmergencyRequestRequest:
+  type: object
+  description: Запрос на создание заявки
+  properties:
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+  required:
+    - locker_id
+
+EmergencyRequestListResponse:
+  type: object
+  description: Ответ со списком заявок и метаданными пагинации
+  properties:
+    items:
+      type: array
+      description: Массив заявок
+      items:
+        $ref: '#/EmergencyRequestWithDetails'
+    total:
+      $ref: './common_fields.yaml#/PaginationTotal'
+    limit:
+      $ref: './common_fields.yaml#/PaginationLimit'
+    offset:
+      $ref: './common_fields.yaml#/PaginationOffset'
+  required:
+    - items
+    - total
+    - limit
+    - offset

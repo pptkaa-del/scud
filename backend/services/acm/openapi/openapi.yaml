@@ -1,0 +1,346 @@
+openapi: 3.2.0
+info:
+  title: ACM — Модуль контроля разделения доступа
+  description: |
+    Внутренний сервис, вызываемый Apache Lua перед каждым проксируемым запросом.
+    Проверяет токен сессии, применяет матрицу разрешений и возвращает
+    контекстные заголовки для downstream-сервисов.
+
+    Сервис **недоступен снаружи** — обращения разрешены только от Apache gateway
+    через внутреннюю docker-сеть.
+  version: 1.0.0
+  contact:
+    name: SCUDDEV
+
+servers:
+  - url: http://localhost:8004
+    description: Development server (internal)
+
+paths:
+  # внутренний Prometheus-эндпоинт. Без auth, доступен только из
+  # backend_net — Apache gateway не проксирует /metrics наружу.
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: |
+        Внутренний эндпоинт Prometheus scrape. Не требует аутентификации,
+        доступен только из docker-сети `backend_net`. Apache gateway
+        НЕ проксирует `/metrics` наружу — внешний клиент получит 404.
+      tags:
+        - internal
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+
+  /live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe (process is up; no dependency I/O)
+      operationId: getLive
+      security: []
+      responses:
+        "200":
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [alive] }
+                required: [status]
+  /ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe (own critical + soft dependencies)
+      operationId: getReady
+      security: []
+      responses:
+        "200":
+          description: Ready (ok) or serving-degraded (a soft dependency is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  db:     { type: string, enum: [ok, unavailable] }
+                  redis:  { type: string, enum: [ok, unavailable] }
+                required: [status, db, redis]
+        "503":
+          description: Not ready (a critical dependency — the database — is down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [unavailable] }
+                  db:     { type: string, enum: [unavailable] }
+                required: [status, db]
+
+  /acm/check:
+    get:
+      summary: Проверка прав доступа
+      description: |
+        Основной эндпоинт ACM. Вызывается Apache Lua (`jwt_auth.lua`) перед
+        проксированием каждого запроса к backend-сервисам.
+
+        **Алгоритм:**
+        1. Публичные пути (`/api/v1/auth/*`, `/health`) — немедленный 200 без токена.
+        2. Для остальных путей — валидация `X-Access-Token` через auth_api.
+        3. Загрузка роли и Допусков пользователя из БД (с кэшированием 30 с).
+        4. Проверка состояния пользователя (`state = active`).
+        5. Проверка матрицы разрешений (роль × метод × путь).
+        6. Для `worker` + locker-scoped пути — проверка наличия Допуска на шкаф.
+        7. Установка заголовков `X-User-Id`, `X-Remote-Role`, `X-Remote-Lockers`.
+
+        **Все не разрешённые явно действия запрещены.**
+      operationId: checkAccess
+      tags:
+        - ACM
+      parameters:
+        - name: X-Access-Token
+          in: header
+          required: false
+          description: |
+            Токен сессии из cookie `access_token`. Обязателен для защищённых путей.
+            Для публичных путей (`/api/v1/auth/*`, `/health`) не требуется.
+          schema:
+            type: string
+            example: "abc123xyz-token-urlsafe-32-bytes"
+        - name: X-Request-Method
+          in: header
+          required: true
+          description: HTTP-метод исходного запроса клиента.
+          schema:
+            type: string
+            enum: [GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD]
+            example: GET
+        - name: X-Request-Path
+          in: header
+          required: true
+          description: Путь исходного запроса (без query string).
+          schema:
+            type: string
+            example: /api/v1/lockers/550e8400-e29b-41d4-a716-446655440000/commands
+      responses:
+        "200":
+          description: |
+            Доступ разрешён. Заголовки содержат контекст пользователя для
+            downstream-сервисов.
+          headers:
+            X-User-Id:
+              description: Идентификатор аутентифицированного пользователя.
+              schema:
+                type: integer
+                example: 42
+            X-Remote-Role:
+              description: Роль пользователя.
+              schema:
+                type: string
+                enum: [worker, operator, administrator]
+                example: worker
+            X-Remote-Lockers:
+              description: |
+                Список UUID шкафов с активным Допуском на момент запроса,
+                разделённых запятой. Либо `*` если у пользователя доступ
+                ко всем шкафам (роли `operator`/`administrator` или
+                Допуск с `full_access=true`).
+              schema:
+                type: string
+                example: "550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        "401":
+          description: Токен отсутствует, недействителен или истёк.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                missing_token:
+                  summary: Токен не передан
+                  value:
+                    type: https://api.scuddocs.com/problems/unauthorized
+                    title: Unauthorized
+                    status: 401
+                    detail: Missing authentication token
+                    instance: /acm/check
+                invalid_token:
+                  summary: Токен недействителен
+                  value:
+                    type: https://api.scuddocs.com/problems/unauthorized
+                    title: Unauthorized
+                    status: 401
+                    detail: Invalid or expired session
+                    instance: /acm/check
+        "403":
+          description: |
+            Доступ запрещён. Причины:
+            - Недостаточно прав по роли
+            - Нет активного Допуска на запрошенный шкаф (для `worker`)
+            - Пользователь деактивирован
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                role_denied:
+                  summary: Недостаточно прав
+                  value:
+                    type: https://api.scuddocs.com/problems/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: "Role 'worker' is below required 'operator'"
+                    instance: /acm/check
+                no_locker_access:
+                  summary: Нет Допуска на шкаф
+                  value:
+                    type: https://api.scuddocs.com/problems/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: "No active access grant for locker 550e8400-e29b-41d4-a716-446655440000"
+                    instance: /acm/check
+                user_inactive:
+                  summary: Пользователь деактивирован
+                  value:
+                    type: https://api.scuddocs.com/problems/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: User account is not active
+                    instance: /acm/check
+
+  /acm/identity:
+    get:
+      summary: Резолвинг сессии в роль (выбор ролевой папки фронтенда gateway'ем)
+      description: |
+        Internal-only. Валидирует access-токен и возвращает роль вызывающего
+        БЕЗ проверки прав по пути (это остаётся за `/acm/check`). Используется
+        `static_route.lua` шлюза для выбора ролевой папки фронтенда. Наружу не
+        проксируется.
+      operationId: resolveIdentity
+      tags:
+        - ACM
+      parameters:
+        - name: X-Access-Token
+          in: header
+          required: true
+          description: Токен сессии из cookie `access_token`.
+          schema:
+            type: string
+            example: "abc123xyz-token-urlsafe-32-bytes"
+      responses:
+        "200":
+          description: Пользователь аутентифицирован; роль в заголовке.
+          headers:
+            X-User-Id:
+              description: Идентификатор аутентифицированного пользователя.
+              schema:
+                type: integer
+                example: 42
+            X-Remote-Role:
+              description: Роль пользователя.
+              schema:
+                type: string
+                enum: [worker, operator, administrator]
+                example: worker
+        "401":
+          description: Токен отсутствует, недействителен, истёк, либо пользователь деактивирован.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                missing_token:
+                  summary: Токен не передан
+                  value:
+                    type: https://api.scuddocs.com/problems/unauthorized
+                    title: Unauthorized
+                    status: 401
+                    detail: Missing authentication token
+                    instance: /acm/identity
+                invalid_token:
+                  summary: Токен недействителен
+                  value:
+                    type: https://api.scuddocs.com/problems/unauthorized
+                    title: Unauthorized
+                    status: 401
+                    detail: Invalid or expired session
+                    instance: /acm/identity
+        "503":
+          description: auth_api недоступен (fail closed — не маскируется под 401).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /health:
+    get:
+      summary: Health check
+      description: Проверяет доступность сервиса и БД.
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Сервис работает нормально.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                db: ok
+        "503":
+          description: БД недоступна, сервис деградирован.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: degraded
+                db: unavailable
+
+components:
+  schemas:
+    ProblemDetails:
+      type: object
+      description: |
+        RFC 7807 Problem Details. Зарегистрированные значения `type`:
+        - https://api.scuddocs.com/problems/unauthorized
+        - https://api.scuddocs.com/problems/forbidden
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          example: https://api.scuddocs.com/problems/forbidden
+        title:
+          type: string
+          example: Forbidden
+        status:
+          type: integer
+          example: 403
+        detail:
+          type: string
+          example: "Role 'worker' is below required 'operator'"
+        instance:
+          type: string
+          example: /acm/check
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-02T10:00:00.000000Z"
+
+    HealthResponse:
+      type: object
+      required: [status, db]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        db:
+          type: string
+          enum: [ok, unavailable]

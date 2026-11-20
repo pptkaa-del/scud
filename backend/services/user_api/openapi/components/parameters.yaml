@@ -1,0 +1,172 @@
+UserIdPath:
+  name: user_id
+  in: path
+  required: true
+  description: Уникальный идентификатор пользователя
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 123
+
+ContractorIdPath:
+  name: contractor_id
+  in: path
+  required: true
+  description: Уникальный идентификатор подрядчика
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 456
+
+AccessIdPath:
+  name: access_id
+  in: path
+  required: true
+  description: Уникальный идентификатор допуска
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 1
+
+UserStateQuery:
+  name: state
+  in: query
+  required: false
+  description: Фильтр по статусу пользователя
+  schema:
+    type: string
+    enum:
+      - active
+      - deactivated
+      - deleted
+  example: active
+
+ContractorIdQuery:
+  name: contractor_id
+  in: query
+  required: false
+  description: Фильтр по ID подрядчика
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 456
+
+UserRoleQuery:
+  name: role
+  in: query
+  required: false
+  description: Фильтр по роли пользователя
+  schema:
+    type: string
+    enum:
+      - worker
+      - operator
+      - administrator
+  example: worker
+
+RemoteUserHeader:
+  name: X-Remote-User
+  in: header
+  required: true
+  description: ID аутентифицированного пользователя
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 1
+
+EmergencyRequestIdPath:
+  name: id
+  in: path
+  required: true
+  description: Уникальный идентификатор заявки
+  schema:
+    type: integer
+    format: int64
+    minimum: 1
+  example: 1
+
+EmergencyRequestStatusQuery:
+  name: status
+  in: query
+  required: false
+  description: Фильтр по статусу заявки
+  schema:
+    type: string
+    enum: [pending, closed]
+  example: pending
+
+LockerIdQuery:
+  name: locker_id
+  in: query
+  required: false
+  description: Фильтр по ID шкафа
+  schema:
+    $ref: '../schemas/common_fields.yaml#/LockerId'
+
+IncludeInactiveQuery:
+  name: include_inactive
+  in: query
+  required: false
+  description: Включать ли деактивированные допуски
+  schema:
+    type: boolean
+    default: false
+  example: false
+
+LimitQuery:
+  name: limit
+  in: query
+  required: false
+  description: Максимальное количество записей на странице
+  schema:
+    type: integer
+    default: 100
+    minimum: 1
+    maximum: 1000
+  example: 50
+
+OffsetQuery:
+  name: offset
+  in: query
+  required: false
+  description: Смещение для пагинации
+  schema:
+    type: integer
+    default: 0
+    minimum: 0
+  example: 0
+
+UserNameSearchQuery:
+  name: q
+  in: query
+  required: false
+  description: >-
+    Подстрочный поиск по имени пользователя: нечувствителен к регистру,
+    обрезаются ведущие/замыкающие пробелы, LIKE-метасимволы (`%`, `_`, `\`)
+    экранируются и ищутся как литералы. Пустое значение/только пробелы —
+    фильтр не применяется. Превышение maxLength → 400.
+  schema:
+    type: string
+    minLength: 1
+    maxLength: 255
+  example: Иванов
+
+ContractorNameSearchQuery:
+  name: q
+  in: query
+  required: false
+  description: >-
+    Подстрочный поиск по названию подрядчика: нечувствителен к регистру,
+    обрезаются ведущие/замыкающие пробелы, LIKE-метасимволы (`%`, `_`, `\`)
+    экранируются и ищутся как литералы. Пустое значение/только пробелы —
+    фильтр не применяется. Превышение maxLength → 400.
+  schema:
+    type: string
+    minLength: 1
+    maxLength: 255
+  example: Строй

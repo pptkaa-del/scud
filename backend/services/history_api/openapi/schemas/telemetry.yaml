@@ -1,0 +1,168 @@
+SensorTelemetry:
+  type: object
+  description: |
+    Запись телеметрии датчика.
+    Хранится в партиционированной таблице sensor_telemetry с партиционированием по месяцам.
+  required:
+    - id
+    - locker_id
+    - sensor_id
+    - sensor_type_code
+    - recorded_at
+  properties:
+    id:
+      $ref: './common_fields.yaml#/TelemetryId'
+    locker_id:
+      $ref: './common_fields.yaml#/LockerId'
+    sensor_id:
+      $ref: './common_fields.yaml#/SensorId'
+    sensor_type_code:
+      allOf:
+        - $ref: './common_fields.yaml#/SensorTypeCode'
+        - description: Код типа датчика (денормализован для быстрой фильтрации)
+    value:
+      $ref: './common_fields.yaml#/NullableNumber'
+    value_text:
+      type: string
+      nullable: true
+      description: Текстовое/булевое значение датчика (для не-числовых типов)
+      example: "open"
+    recorded_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Временная метка когда было записано значение
+    metadata:
+      $ref: './common_fields.yaml#/Metadata'
+  example:
+    id: 123456789
+    locker_id: "550e8400-e29b-41d4-a716-446655440000"
+    sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+    sensor_type_code: "temperature"
+    value: 25.5
+    value_text: null
+    recorded_at: "2024-03-18T10:30:00Z"
+    metadata:
+      source: "device"
+
+TelemetryReading:
+  type: object
+  description: Одна запись телеметрии для batch-вставки
+  required:
+    - sensor_id
+    - sensor_type_code
+  properties:
+    locker_id:
+      allOf:
+        - $ref: './common_fields.yaml#/LockerId'
+        - description: ID шкафа (опционально, если указан в root объекте batch запроса)
+    sensor_id:
+      $ref: './common_fields.yaml#/SensorId'
+    sensor_type_code:
+      $ref: './common_fields.yaml#/SensorTypeCode'
+    value:
+      $ref: './common_fields.yaml#/NullableNumber'
+    value_text:
+      type: string
+      description: Текстовое/булевое значение (опционально)
+      example: "closed"
+    recorded_at:
+      allOf:
+        - $ref: './common_fields.yaml#/Timestamp'
+        - description: Время записи (по умолчанию - текущее время сервера)
+    metadata:
+      $ref: './common_fields.yaml#/Metadata'
+    event_uid:
+      type: string
+      format: uuid
+      nullable: true
+      description: |
+        ARC-02: per-reading UUID для идемпотентности повторной доставки
+        батча. NULL → дедупликация не применяется. Дубликат по
+        (event_uid, recorded_at) пропускается (ON CONFLICT DO NOTHING).
+  example:
+    sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+    sensor_type_code: "temperature"
+    value: 23.7
+    recorded_at: "2024-03-18T10:25:00Z"
+    metadata: {}
+
+TelemetryBatchRequest:
+  type: object
+  description: |
+    Запрос на batch-вставку телеметрии (до 1000 записей за раз).
+    Оптимизирован для приема данных от locker_api.
+  required:
+    - readings
+  properties:
+    locker_id:
+      allOf:
+        - $ref: './common_fields.yaml#/LockerId'
+        - description: ID шкафа (опционально, применяется ко всем readings если не указан в них)
+    readings:
+      type: array
+      description: Массив записей телеметрии
+      minItems: 1
+      maxItems: 1000
+      items:
+        $ref: '#/TelemetryReading'
+  example:
+    locker_id: "550e8400-e29b-41d4-a716-446655440000"
+    readings:
+      - sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+        sensor_type_code: "temperature"
+        value: 23.7
+        recorded_at: "2024-03-18T10:25:00Z"
+      - sensor_id: "660e8400-e29b-41d4-a716-446655440222"
+        sensor_type_code: "humidity"
+        value: 65.0
+        recorded_at: "2024-03-18T10:25:00Z"
+
+TelemetryBatchResponse:
+  type: object
+  description: Ответ на batch-вставку телеметрии
+  required:
+    - inserted
+  properties:
+    inserted:
+      type: integer
+      description: Количество вставленных записей
+      example: 150
+
+TelemetryListResponse:
+  type: object
+  description: Список записей телеметрии с метаданными пагинации
+  required:
+    - items
+    - total
+    - limit
+  properties:
+    items:
+      type: array
+      description: Массив записей телеметрии
+      items:
+        $ref: '#/SensorTelemetry'
+    total:
+      type: integer
+      description: Общее количество записей (с учетом фильтров, без пагинации)
+      example: 5432
+    limit:
+      type: integer
+      description: Лимит записей в текущем ответе
+      example: 1000
+    offset:
+      type: integer
+      description: Смещение текущего ответа
+      example: 0
+  example:
+    items:
+      - id: 123456789
+        locker_id: "550e8400-e29b-41d4-a716-446655440000"
+        sensor_id: "660e8400-e29b-41d4-a716-446655440111"
+        sensor_type_code: "temperature"
+        value: 25.5
+        value_text: null
+        recorded_at: "2024-03-18T10:30:00Z"
+        metadata: {}
+    total: 5432
+    limit: 1000
+    offset: 0

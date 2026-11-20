@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Быстрое развёртывание СКУД на сервере из git-репозитория.
 #
-#   sudo bash <(curl -fsSL https://raw.githubusercontent.com/pptkaa-del/scud/main/install.sh)
+#   curl -fsSL https://raw.githubusercontent.com/pptkaa-del/scud/main/install.sh -o install.sh
 #   sudo bash install.sh [git-url] [ref] [опции deploy.sh]
 #
 # Первый запуск: ставит git, готовит SSH deploy key (для приватного репозитория),

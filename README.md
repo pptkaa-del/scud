@@ -14,11 +14,11 @@ Backend (микросервисы в Docker Compose), фронтенд, MQTT-б�
 На сервере одной командой:
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/pptkaa-del/scud/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/pptkaa-del/scud/main/install.sh -o install.sh && sudo bash install.sh
 ```
 
 Другая ветка или тег — вторым аргументом:
-`sudo bash <(curl -fsSL .../install.sh) https://github.com/pptkaa-del/scud.git v1.1`.
+`sudo bash install.sh https://github.com/pptkaa-del/scud.git v1.1`.
 
 Дальше `deploy.sh install` задаст несколько вопросов (адрес сайта, телефон администратора и т.д.;
 Enter — значение по умолчанию), сгенерирует секреты, соберёт образы (5–30 минут), поднимет стек
@@ -28,8 +28,7 @@ Enter — значение по умолчанию), сгенерирует се
 
 ```bash
 SCUD_PUBLIC_URL=https://scud.example.com SCUD_ADMIN_PHONE=+79001234567 \
-    sudo -E bash <(curl -fsSL https://raw.githubusercontent.com/pptkaa-del/scud/main/install.sh) \
-    https://github.com/pptkaa-del/scud.git main -y
+    sudo -E bash install.sh https://github.com/pptkaa-del/scud.git main -y
 ```
 
 ### 2. Обновление

@@ -88,13 +88,14 @@ if [ -n "${GIT_SSH_COMMAND:-}" ]; then
     # update в deploy.sh делает git fetch — ключ нужен и ему
     git -C "$DIR" config core.sshCommand "$GIT_SSH_COMMAND"
 fi
-chmod +x "$DIR/backend/scripts/deploy.sh"
+# Не chmod: смена прав — это изменение рабочей копии, и deploy.sh откажется работать.
+DEPLOY=(bash "$DIR/backend/scripts/deploy.sh")
 
 # --- Установка или обновление ---
 if [ -f "$DIR/backend/deploy.conf" ]; then
     info "Найдена установка в $DIR — обновление до $REF"
-    exec "$DIR/backend/scripts/deploy.sh" update --dir "$DIR" --ref "$REF" "$@"
+    exec "${DEPLOY[@]}" update --dir "$DIR" --ref "$REF" "$@"
 else
     info "Новая установка в $DIR ($REF)"
-    exec "$DIR/backend/scripts/deploy.sh" install --dir "$DIR" --git "$REPO" --ref "$REF" "$@"
+    exec "${DEPLOY[@]}" install --dir "$DIR" --git "$REPO" --ref "$REF" "$@"
 fi

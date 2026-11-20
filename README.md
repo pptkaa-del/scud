@@ -31,6 +31,19 @@ SCUD_PUBLIC_URL=https://scud.example.com SCUD_ADMIN_PHONE=+79001234567 \
     sudo -E bash install.sh https://github.com/pptkaa-del/scud.git main -y
 ```
 
+### HTTPS (nginx + Let's Encrypt)
+
+Нужен домен, A-запись которого указывает на сервер, и открытые порты 80 и 443:
+
+```bash
+sudo bash /opt/scud/backend/scripts/setup-tls.sh scud.example.com admin@example.com
+```
+
+Скрипт переносит `apache_gateway` на `127.0.0.1:8080`, ставит nginx и certbot, получает
+сертификат (продлевается автоматически), включает редирект на HTTPS и переводит СКУД
+на адрес `https://домен` (`deploy.sh update --reconfigure`). Подробности — раздел
+«TLS termination» в [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md).
+
 ### 2. Обновление
 
 На сервере — та же команда или напрямую:

@@ -44,6 +44,19 @@ sudo bash /opt/scud/backend/scripts/setup-tls.sh scud.example.com admin@example.
 на адрес `https://домен` (`deploy.sh update --reconfigure`). Подробности — раздел
 «TLS termination» в [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md).
 
+### Эмуляция подключённой платы
+
+Для проверки без железа — одна эмулированная релейная плата (шкаф `RELAY-5001`):
+
+```bash
+sudo bash /opt/scud/emulator/run-device.sh            # создать шкаф и подключить плату
+sudo bash /opt/scud/emulator/run-device.sh --events   # то же + события безопасности
+sudo bash /opt/scud/emulator/run-device.sh logs       # журнал
+sudo bash /opt/scud/emulator/run-device.sh stop       # остановить
+```
+
+Несколько плат: `RELAY_COUNT=10`; другой номер: `RELAY_ID=6001`. Подробнее — [emulator/README.md](emulator/README.md).
+
 ### 2. Обновление
 
 На сервере — та же команда или напрямую:
